@@ -2,10 +2,10 @@
 ### Team 숙크크(SCC) | Open Source Programming Team Project (2026-1)
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 ![AI](https://img.shields.io/badge/AI-Gemini-blue)
-![Frontend](https://img.shields.io/badge/frontend-React%2BVite-orange)
-![Backend](https://img.shields.io/badge/backend-Node.js%2BExpress-yellow)
+![Frontend](https://img.shields.io/badge/frontend-Streamlit-orange)
+![Backend](https://img.shields.io/badge/backend-Python-yellow)
 ![Database](https://img.shields.io/badge/database-MongoDB-green)
-![Deployment](https://img.shields.io/badge/deploy-Vercel%20%7C%20Render-lightgrey)
+![Deployment](https://img.shields.io/badge/deploy-Streamlit%20Cloud-lightgrey)
 
 > 감정적인 학교 민원을 AI가 정제하고 구조화하여  
 > 학교가 핵심 내용을 빠르게 파악할 수 있도록 돕는 웹 서비스
@@ -91,3 +91,18 @@
 
 결과:
 "해당 사안에 대한 확인 및 조치를 요청드립니다."
+```
+---
+
+## 🌿 Git Branch Strategy
+
+```text
+main
+└── develop
+    ├── feature/frontend-parent
+    ├── feature/prompt-engineering
+    └── feature/backend-core
+```
+- `main` : 최종 배포 브랜치
+- `develop` : 통합 개발 브랜치
+- `feature/*` : 기능 단위 작업 브랜치
