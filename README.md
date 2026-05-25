@@ -1,93 +1,79 @@
-# 🏫 학교 민원 AI 정제 서비스
-### Team 숙크크(SCC) | Open Source Programming Team Project (2026-1)
-![Status](https://img.shields.io/badge/status-active-brightgreen)
-![AI](https://img.shields.io/badge/AI-Gemini-blue)
-![Frontend](https://img.shields.io/badge/frontend-React%2BVite-orange)
-![Backend](https://img.shields.io/badge/backend-Node.js%2BExpress-yellow)
-![Database](https://img.shields.io/badge/database-MongoDB-green)
-![Deployment](https://img.shields.io/badge/deploy-Vercel%20%7C%20Render-lightgrey)
+# 학교 민원 AI 정제 및 자동 분류 플랫폼
 
-> 감정적인 학교 민원을 AI가 정제하고 구조화하여  
-> 학교가 핵심 내용을 빠르게 파악할 수 있도록 돕는 웹 서비스
-> AI 기반 감정 정제 및 민원 구조화를 통해  
-> 학교 민원 처리 과정을 개선하는 스마트 민원 플랫폼
+Team 숙크크(SCC) Open Source Programming Team Project 2026-1
 
----
+## 프로젝트 목표
 
-## 📌 Project Overview
+이 프로젝트는 학부모 민원을 디지털로 접수하고, 팀이 직접 Fine-Tuning한 KoBERT 모델로 민원 카테고리를 자동 분류한 뒤, Gemini를 보조 AI로 사용해 감정 표현을 정제하고 행정 처리용 JSON으로 구조화하는 서비스입니다.
 
-최근 학교 민원 건수가 지속적으로 증가하면서  
-교사의 감정노동 및 민원 스트레스 문제가 사회적 이슈로 떠오르고 있다.
+핵심 평가 포인트는 단순 생성형 AI API 호출이 아니라 직접 개발한 KoBERT 분류 모델을 서비스 흐름에 적용하는 것입니다.
 
-특히 기존 전화 중심 민원 시스템은 다음과 같은 구조적 문제를 가진다:
+## MVP 기능
 
-- 감정적 표현 전달로 인한 오해 발생
-- 사실관계 파악의 어려움
-- 기록 및 데이터 관리 한계
-- 담당자 부재 시 처리 지연
+- 학부모 민원 작성
+- KoBERT 기반 자동 분류
+- Gemini 기반 감정 정제
+- Gemini 기반 JSON 구조화
+- MySQL 저장
+- 관리자 민원 목록 조회
+- 상태 변경
+- 카테고리별, 상태별 통계
+- 모델 평가 결과 확인
 
-본 프로젝트는 생성형 AI를 활용하여  
-감정적인 민원 표현을 사실 중심의 문장으로 정제하고,  
-민원 내용을 구조화하여 학교 담당자가 보다 효율적으로 민원을 처리할 수 있도록 돕는 서비스이다.
+## 기술 스택
 
----
+- Frontend: Streamlit
+- Backend: Python
+- Database: MySQL
+- AI Model: KoBERT, PyTorch, HuggingFace Transformers
+- Generative AI: Gemini 2.5 Flash
+- Deployment: Streamlit Cloud
 
-## 🎯 Objectives
+## 실행 방법
 
-- AI 기반 감정 정제 시스템 구현
-- 학교 민원 자동 구조화 기능 개발
-- 교사 감정노동 감소 및 교권 보호
-- 학부모-학교 간 갈등 완화
-- 접근성을 고려한 사용자 경험 제공
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+streamlit run app.py
+```
 
----
+MySQL을 사용할 경우 `sql/schema.sql`을 먼저 실행하고 `.env`에 DB 접속 정보를 입력합니다.
 
-## 📊 Scope Definition (중요)
+## 모델 학습 순서
 
-### 🧠 Project Scope (기획 범위)
-- 음성 + 텍스트 기반 민원 입력
-- AI 기반 감정 정제
-- 민원 자동 구조화
-- 관리자용 결과 확인 시스템
-- 확장 가능 구조 설계 (STT / 통계 / 분석)
+```bash
+python scripts/generate_synthetic_data.py
+python model/train_kobert.py
+python model/evaluate.py
+```
 
----
+학습된 모델은 `model/saved_model`에 저장되며, Streamlit 앱의 KoBERT 추론 모듈이 이 경로를 자동으로 사용합니다.
 
-### ⚙️ Implementation Scope (구현 범위 - MVP)
+## 민원 분류 카테고리
 
-현재 실제 구현 범위는 다음과 같다:
+- 수업/학습 문제
+- 교사 태도/행동
+- 시설/환경
+- 급식
+- 생활지도/안전
+- 기타
 
-- 텍스트 기반 민원 입력
-- Gemini API 기반 감정 정제
-- JSON 형태 민원 구조화
-- 기본 관리자 UI (Streamlit)
-- DB 저장 기능
-
----
-
-## 💡 Core Idea
-
-사용자가 민원을 입력하면 AI가 다음 과정을 수행한다:
-
-1. 감정적 표현 완화
-2. 핵심 내용 추출
-3. 구조화된 데이터 생성
-4. 관리자 화면 제공
-
-이를 통해:
-- 학부모는 명확하게 의견 전달
-- 학교는 빠르게 핵심 파악 가능
-
----
-
-## 🧠 Key Features
-
-### ✅ AI 감정 정제
-감정적 표현을 공손하고 객관적인 문장으로 변환
+## 프로젝트 구조
 
 ```text
-원문:
-"왜 이렇게 처리 안 하세요? 너무 화납니다."
+scc-osp2026/
+  app.py
+  pages/
+  src/
+    ai/
+    db/
+    services/
+    utils/
+  model/
+  data/
+  sql/
+  reports/
+  prompts/
+  scripts/
+```
 
-결과:
-"해당 사안에 대한 확인 및 조치를 요청드립니다."
