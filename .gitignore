@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.py[cod]
+.streamlit/secrets.toml
+data/processed/demo_complaints.json
+model/saved_model/
+model/checkpoints/
+reports/*.png
+reports/*.json
+reports/*.txt
+streamlit.*.log
+.venv/
+venv/
