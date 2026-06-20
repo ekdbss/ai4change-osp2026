@@ -6,12 +6,15 @@ from src.config import get_model_path
 from src.db.connection import is_db_configured
 from src.db.complaint_repository import create_complaint
 from src.db.complaint_repository import get_complaint_for_parent as get_db_parent_complaint
+from src.services.auth_service import require_parent_login
 from src.services import session_store
 from src.services.complaint_service import process_complaint
 from src.utils.validators import validate_complaint, validate_student_info
 
 
 st.set_page_config(page_title="학부모 민원", layout="wide")
+
+parent_user = require_parent_login()
 
 
 @st.cache_resource
@@ -58,6 +61,7 @@ def lookup_parent_complaint(complaint_id: int, student_name: str) -> dict | None
 
 st.title("학부모 민원 포털")
 st.caption("민원 내용을 학교 담당자가 확인하기 쉬운 문장으로 정리한 뒤 접수합니다.")
+st.info(f"{parent_user['parent_name']}님, 민원 접수와 처리 현황 조회를 이용할 수 있습니다.")
 
 submit_tab, status_tab = st.tabs(["민원 접수", "내 민원 현황"])
 

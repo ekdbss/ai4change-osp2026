@@ -7,10 +7,13 @@ from src.db.complaint_repository import get_status_history as get_db_status_hist
 from src.db.complaint_repository import list_attachments as list_db_attachments
 from src.db.complaint_repository import list_complaints as list_db_complaints
 from src.db.complaint_repository import update_complaint_review as update_db_review
+from src.services.auth_service import require_admin_login
 from src.services import session_store
 
 
 st.set_page_config(page_title="관리자 민원 처리", layout="wide")
+
+admin_user = require_admin_login()
 
 CATEGORIES = list(LABEL_TO_ID.keys())
 STATUSES = ["접수", "검토 중", "처리 완료", "보류"]
@@ -65,6 +68,7 @@ def save_review(
     parent_visible_comment: str,
 ) -> None:
     memo = parent_visible_comment.strip()
+    admin_id = admin_user.get("id")
     if is_db_configured():
         update_db_review(
             complaint_id=complaint_id,
@@ -73,6 +77,7 @@ def save_review(
             priority_level=priority_level,
             parent_visible_comment=parent_visible_comment,
             memo=memo,
+            admin_id=admin_id,
         )
     else:
         session_store.update_complaint_review(

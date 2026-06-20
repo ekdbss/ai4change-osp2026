@@ -3,10 +3,13 @@ import streamlit as st
 
 from src.db.connection import is_db_configured
 from src.db.complaint_repository import list_complaints as list_db_complaints
+from src.services.auth_service import require_admin_login
 from src.services import session_store
 
 
 st.set_page_config(page_title="민원 통계", layout="wide")
+
+require_admin_login()
 
 st.title("민원 통계")
 st.caption("접수일을 기준으로 카테고리별 민원 발생 흐름을 확인합니다.")
