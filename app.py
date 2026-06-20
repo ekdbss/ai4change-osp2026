@@ -7,25 +7,34 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("AI 기반 학교 민원 감정 정제 및 자동 분류 플랫폼")
-st.caption("KoBERT 직접 분류 모델과 Gemini 보조 정제를 결합한 민원 처리 MVP")
+st.title("학교 민원 AI 플랫폼")
+st.caption("학부모 민원을 정제하고, 학교 담당자가 빠르게 처리할 수 있도록 돕는 민원 관리 서비스입니다.")
 
 st.markdown(
     """
-    이 MVP는 다음 흐름을 기준으로 구현되어 있습니다.
-
-    1. 학부모가 민원 내용을 입력합니다.
-    2. 직접 Fine-Tuning한 KoBERT 모델이 민원 카테고리를 분류합니다.
-    3. Gemini가 감정 표현을 중립적으로 정제하고 행정 처리용 JSON으로 구조화합니다.
-    4. MySQL에 원문, 정제본, 분류 결과, 처리 상태를 저장합니다.
-    5. 관리자는 대시보드에서 민원을 조회하고 상태를 변경합니다.
+    이 서비스는 학부모가 작성한 민원을 AI가 중립적인 문장으로 정리하고,
+    KoBERT 기반 분류 결과를 바탕으로 학교 담당자가 민원을 처리할 수 있도록 구성되어 있습니다.
     """
 )
 
-col1, col2, col3 = st.columns(3)
-col1.metric("MVP 핵심 AI", "KoBERT 분류")
-col2.metric("보조 AI", "Gemini 정제/구조화")
-col3.metric("저장소", "MySQL")
+parent_col, admin_col = st.columns(2)
 
-st.info("왼쪽 사이드바에서 민원 작성, 관리자 대시보드, 통계, 모델 평가 화면으로 이동하세요.")
+with parent_col:
+    st.subheader("학부모")
+    st.write("민원을 작성하고, 접수번호로 처리 현황을 확인합니다.")
+    st.page_link("pages/1_submit_complaint.py", label="학부모 민원 접수로 이동")
 
+with admin_col:
+    st.subheader("관리자")
+    st.write("접수된 민원을 확인하고 상태, 카테고리, 긴급도, 안내 코멘트를 관리합니다.")
+    st.page_link("pages/2_admin_dashboard.py", label="관리자 민원 처리로 이동")
+
+st.divider()
+
+st.subheader("현재 MVP 기능")
+st.write("- 학부모 민원 작성 및 AI 정제 미리보기")
+st.write("- KoBERT 기반 민원 카테고리 추천")
+st.write("- Gemini 기반 감정 정제 및 구조화")
+st.write("- MySQL 민원 저장")
+st.write("- 관리자 상태 변경, 카테고리 확정, 긴급도 설정, 학부모 안내 코멘트 저장")
+st.write("- 접수일 기준 민원 통계 시각화")
