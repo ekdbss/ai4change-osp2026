@@ -11,9 +11,6 @@ from src.services import session_store
 from src.services.complaint_service import process_complaint
 from src.utils.validators import validate_complaint, validate_student_info
 
-
-st.set_page_config(page_title="학부모 민원", layout="wide")
-
 parent_user = require_parent_login()
 
 

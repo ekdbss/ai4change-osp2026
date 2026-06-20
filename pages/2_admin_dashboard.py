@@ -10,9 +10,6 @@ from src.db.complaint_repository import update_complaint_review as update_db_rev
 from src.services.auth_service import require_admin_login
 from src.services import session_store
 
-
-st.set_page_config(page_title="관리자 민원 처리", layout="wide")
-
 admin_user = require_admin_login()
 
 CATEGORIES = list(LABEL_TO_ID.keys())

@@ -6,9 +6,6 @@ from src.db.complaint_repository import list_complaints as list_db_complaints
 from src.services.auth_service import require_admin_login
 from src.services import session_store
 
-
-st.set_page_config(page_title="민원 통계", layout="wide")
-
 require_admin_login()
 
 st.title("민원 통계")
