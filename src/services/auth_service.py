@@ -8,15 +8,24 @@ import streamlit as st
 from src.db.connection import get_connection, is_db_configured
 
 
+ACTIVE_ROLE_KEY = "active_role"
+
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def get_current_parent() -> dict | None:
+    _normalize_single_role()
+    if st.session_state.get(ACTIVE_ROLE_KEY) != "parent":
+        return None
     return st.session_state.get("parent_user")
 
 
 def get_current_admin() -> dict | None:
+    _normalize_single_role()
+    if st.session_state.get(ACTIVE_ROLE_KEY) != "admin":
+        return None
     return st.session_state.get("admin_user")
 
 
@@ -29,16 +38,18 @@ def is_admin_logged_in() -> bool:
 
 
 def login_parent(parent_name: str, phone_tail: str) -> None:
+    _clear_admin_state()
     st.session_state["parent_user"] = {
         "parent_name": parent_name.strip(),
         "phone_tail": phone_tail.strip(),
     }
+    st.session_state[ACTIVE_ROLE_KEY] = "parent"
 
 
 def logout_parent() -> None:
-    st.session_state.pop("parent_user", None)
-    st.session_state.pop("pending_complaint", None)
-    st.session_state.pop("pending_attachments", None)
+    _clear_parent_state()
+    if st.session_state.get(ACTIVE_ROLE_KEY) == "parent":
+        st.session_state.pop(ACTIVE_ROLE_KEY, None)
 
 
 def login_admin(username: str, password: str) -> bool:
@@ -49,15 +60,27 @@ def login_admin(username: str, password: str) -> bool:
     if not admin_user:
         return False
 
+    _clear_parent_state()
     st.session_state["admin_user"] = admin_user
+    st.session_state[ACTIVE_ROLE_KEY] = "admin"
     return True
 
 
 def logout_admin() -> None:
-    st.session_state.pop("admin_user", None)
+    _clear_admin_state()
+    if st.session_state.get(ACTIVE_ROLE_KEY) == "admin":
+        st.session_state.pop(ACTIVE_ROLE_KEY, None)
 
 
 def require_parent_login() -> dict:
+    _normalize_single_role(preferred_role="parent")
+    if st.session_state.get(ACTIVE_ROLE_KEY) == "admin":
+        _render_role_switch_notice(
+            current_role_label="관리자",
+            target_role_label="학부모",
+            logout_handler=logout_admin,
+        )
+
     parent_user = get_current_parent()
     if parent_user:
         with st.sidebar:
@@ -88,6 +111,14 @@ def require_parent_login() -> dict:
 
 
 def require_admin_login() -> dict:
+    _normalize_single_role(preferred_role="admin")
+    if st.session_state.get(ACTIVE_ROLE_KEY) == "parent":
+        _render_role_switch_notice(
+            current_role_label="학부모",
+            target_role_label="관리자",
+            logout_handler=logout_parent,
+        )
+
     admin_user = get_current_admin()
     if admin_user:
         with st.sidebar:
@@ -113,6 +144,70 @@ def require_admin_login() -> dict:
             st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
 
     st.info("데모 기본 계정은 admin / admin1234 입니다. 발표 전에는 .env에서 변경하세요.")
+    st.stop()
+
+
+def _normalize_single_role(preferred_role: str | None = None) -> None:
+    active_role = st.session_state.get(ACTIVE_ROLE_KEY)
+    has_parent = "parent_user" in st.session_state
+    has_admin = "admin_user" in st.session_state
+
+    if active_role == "parent":
+        _clear_admin_state()
+        if not has_parent:
+            st.session_state.pop(ACTIVE_ROLE_KEY, None)
+        return
+
+    if active_role == "admin":
+        _clear_parent_state()
+        if not has_admin:
+            st.session_state.pop(ACTIVE_ROLE_KEY, None)
+        return
+
+    if has_parent and has_admin:
+        if preferred_role == "admin":
+            _clear_parent_state()
+            st.session_state[ACTIVE_ROLE_KEY] = "admin"
+        else:
+            _clear_admin_state()
+            st.session_state[ACTIVE_ROLE_KEY] = "parent"
+        return
+
+    if has_parent:
+        st.session_state[ACTIVE_ROLE_KEY] = "parent"
+    elif has_admin:
+        st.session_state[ACTIVE_ROLE_KEY] = "admin"
+    else:
+        st.session_state.pop(ACTIVE_ROLE_KEY, None)
+
+
+def _clear_parent_state() -> None:
+    st.session_state.pop("parent_user", None)
+    st.session_state.pop("pending_complaint", None)
+    st.session_state.pop("pending_attachments", None)
+
+
+def _clear_admin_state() -> None:
+    st.session_state.pop("admin_user", None)
+
+
+def _render_role_switch_notice(
+    current_role_label: str,
+    target_role_label: str,
+    logout_handler,
+) -> None:
+    st.title(f"{target_role_label} 로그인")
+    st.warning(
+        f"현재 {current_role_label} 계정으로 로그인되어 있습니다. "
+        f"{target_role_label}로 이용하려면 먼저 로그아웃해주세요."
+    )
+    if st.button(
+        f"{current_role_label} 로그아웃하고 {target_role_label} 로그인하기",
+        type="primary",
+        use_container_width=True,
+    ):
+        logout_handler()
+        st.rerun()
     st.stop()
 
 
