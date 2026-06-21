@@ -33,8 +33,9 @@ for item in complaints:
         {
             "접수일": pd.to_datetime(created_at).date() if created_at else None,
             "카테고리": item.get("final_category") or item.get("ai_category") or item.get("category") or "기타",
+            "긴급도": item.get("final_urgency") or item.get("ai_urgency") or "보통",
             "상태": item.get("status", "접수"),
-            "긴급도": int(item.get("priority_level") or 3),
+            "우선순위": int(item.get("priority_level") or 3),
             "학교": item.get("school_name", ""),
         }
     )
@@ -43,7 +44,7 @@ df = pd.DataFrame(rows).dropna(subset=["접수일"])
 
 metric_cols = st.columns(4)
 metric_cols[0].metric("전체 민원", len(df))
-metric_cols[1].metric("긴급 민원", int((df["긴급도"] <= 1).sum()))
+metric_cols[1].metric("긴급 민원", int((df["긴급도"] == "높음").sum()))
 metric_cols[2].metric("처리 완료", int((df["상태"] == "처리 완료").sum()))
 metric_cols[3].metric("카테고리 수", int(df["카테고리"].nunique()))
 
@@ -59,6 +60,17 @@ daily = (
     .sort_index()
 )
 st.line_chart(daily, use_container_width=True)
+
+st.subheader("접수일 기준 긴급도 추이")
+daily_urgency = (
+    df.groupby(["접수일", "긴급도"])
+    .size()
+    .reset_index(name="건수")
+    .pivot(index="접수일", columns="긴급도", values="건수")
+    .fillna(0)
+    .sort_index()
+)
+st.line_chart(daily_urgency, use_container_width=True)
 
 col1, col2 = st.columns(2)
 

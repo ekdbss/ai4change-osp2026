@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS complaints (
     ai_category VARCHAR(50) NOT NULL,
     final_category VARCHAR(50),
     ai_confidence FLOAT NULL,
+    ai_urgency VARCHAR(20) NOT NULL DEFAULT '보통',
+    final_urgency VARCHAR(20) NOT NULL DEFAULT '보통',
+    urgency_confidence FLOAT NULL,
     priority_level TINYINT NOT NULL DEFAULT 3,
 
     status VARCHAR(30) NOT NULL DEFAULT '접수',
@@ -93,6 +96,8 @@ CREATE TABLE IF NOT EXISTS complaint_status_history (
     new_status VARCHAR(30) NOT NULL,
     prev_final_category VARCHAR(50),
     new_final_category VARCHAR(50),
+    prev_final_urgency VARCHAR(20),
+    new_final_urgency VARCHAR(20),
     prev_priority_level TINYINT,
     new_priority_level TINYINT,
 
@@ -136,6 +141,7 @@ CREATE INDEX idx_users_login_id ON users(login_id);
 CREATE INDEX idx_complaints_user_id ON complaints(user_id);
 CREATE INDEX idx_complaints_ai_category ON complaints(ai_category);
 CREATE INDEX idx_complaints_final_category ON complaints(final_category);
+CREATE INDEX idx_complaints_final_urgency ON complaints(final_urgency);
 CREATE INDEX idx_complaints_status ON complaints(status);
 CREATE INDEX idx_complaints_priority ON complaints(priority_level);
 CREATE INDEX idx_complaints_created_at ON complaints(created_at);

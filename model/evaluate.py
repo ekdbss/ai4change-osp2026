@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -15,27 +16,33 @@ from sklearn.metrics import (
 )
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT_DIR))
 
-MODEL_DIR = Path("model/saved_model")
-TEST_PATH = Path("data/processed/test.csv")
-REPORT_DIR = Path("reports")
+from src.ai.label_map import LABEL_TO_ID, URGENCY_TO_ID, normalize_category
 
 
-def main() -> None:
-    if not MODEL_DIR.exists():
-        raise FileNotFoundError(f"저장된 모델이 없습니다: {MODEL_DIR}")
-    if not TEST_PATH.exists():
-        raise FileNotFoundError(f"테스트 데이터가 없습니다: {TEST_PATH}")
+MODEL_DIR = ROOT_DIR / "model/saved_model"
+TEST_PATH = ROOT_DIR / "data/processed/test.csv"
+REPORT_DIR = ROOT_DIR / "reports"
 
-    label_map = json.loads((MODEL_DIR / "label_map.json").read_text(encoding="utf-8"))
+
+def evaluate_task(
+    task_name: str,
+    label_column: str,
+    label_map: dict[str, int],
+    df: pd.DataFrame,
+) -> dict:
+    task_model_dir = MODEL_DIR / task_name
+    if not task_model_dir.exists():
+        raise FileNotFoundError(f"저장된 {task_name} 모델이 없습니다: {task_model_dir}")
+
     id_to_label = {value: key for key, value in label_map.items()}
-
-    tokenizer = AutoTokenizer.from_pretrained(str(MODEL_DIR))
-    model = AutoModelForSequenceClassification.from_pretrained(str(MODEL_DIR))
+    tokenizer = AutoTokenizer.from_pretrained(str(task_model_dir))
+    model = AutoModelForSequenceClassification.from_pretrained(str(task_model_dir))
     model.eval()
 
-    df = pd.read_csv(TEST_PATH)
-    true_ids = [label_map[label] for label in df["label"]]
+    true_ids = [label_map[label] for label in df[label_column]]
     predictions = []
 
     for text in df["text"]:
@@ -59,31 +66,45 @@ def main() -> None:
         target_names=target_names,
         zero_division=0,
     )
-
     matrix = confusion_matrix(true_ids, predictions)
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    (REPORT_DIR / "classification_report.txt").write_text(report, encoding="utf-8")
-    (REPORT_DIR / "metrics.json").write_text(
-        json.dumps(
-            {
-                "accuracy": accuracy,
-                "precision": precision,
-                "recall": recall,
-                "f1": f1,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
+    (REPORT_DIR / f"{task_name}_classification_report.txt").write_text(report, encoding="utf-8")
+    metrics = {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+    }
+    (REPORT_DIR / f"{task_name}_metrics.json").write_text(
+        json.dumps(metrics, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
     display = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=target_names)
     display.plot(cmap="Blues", xticks_rotation=45)
     plt.tight_layout()
-    plt.savefig(REPORT_DIR / "confusion_matrix.png", dpi=160)
+    plt.savefig(REPORT_DIR / f"{task_name}_confusion_matrix.png", dpi=160)
+    plt.close()
+    return metrics
+
+
+def main() -> None:
+    if not TEST_PATH.exists():
+        raise FileNotFoundError(f"테스트 데이터가 없습니다: {TEST_PATH}")
+
+    df = pd.read_csv(TEST_PATH)
+    df["category"] = df["category"].map(normalize_category)
+
+    results = {
+        "category": evaluate_task("category", "category", LABEL_TO_ID, df),
+        "urgency": evaluate_task("urgency", "urgency", URGENCY_TO_ID, df),
+    }
+    (REPORT_DIR / "multitask_metrics.json").write_text(
+        json.dumps(results, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":
     main()
-

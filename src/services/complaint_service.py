@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.ai.gemini_service import GeminiService
 from src.ai.kobert_predictor import KoBERTPredictor
 from src.ai.pii_masker import mask_sensitive_info
+from src.ai.label_map import priority_for_urgency
 
 
 def process_complaint(
@@ -18,6 +19,13 @@ def process_complaint(
     gemini_result = gemini_service.process(masked_text, prediction["category"])
     structured = gemini_result.structured_json
     ai_category = prediction["category"]
+    ai_urgency = prediction.get("urgency", structured.get("urgency", "보통"))
+    recommended_department = prediction.get("recommended_department") or structured.get(
+        "recommended_department",
+        "",
+    )
+    structured["urgency"] = ai_urgency
+    structured["recommended_department"] = recommended_department
 
     return {
         **complaint_meta,
@@ -29,30 +37,19 @@ def process_complaint(
         "ai_category": ai_category,
         "final_category": ai_category,
         "ai_confidence": prediction["confidence"],
-        "priority_level": _default_priority(ai_category, structured.get("urgency")),
+        "ai_urgency": ai_urgency,
+        "final_urgency": ai_urgency,
+        "urgency_confidence": prediction.get("urgency_confidence"),
+        "priority_level": prediction.get("priority_level") or priority_for_urgency(ai_urgency),
         "status": "접수",
-        "recommended_department": structured.get("recommended_department", ""),
+        "recommended_department": recommended_department,
         "parent_visible_comment": "",
         "kobert_model_available": prediction["model_available"],
+        "category_model_available": prediction.get("category_model_available", False),
+        "urgency_model_available": prediction.get("urgency_model_available", False),
         "gemini_model_available": gemini_result.model_available,
+        "top_categories": prediction.get("top_categories", []),
         # Backward-compatible aliases for demo/session code that may still read old keys.
         "category": ai_category,
         "confidence": prediction["confidence"],
     }
-
-
-def _default_priority(category: str, urgency: str | None = None) -> int:
-    if urgency == "높음":
-        return 1
-    if urgency == "낮음":
-        return 4
-
-    category_priority = {
-        "교사 태도/행동": 1,
-        "생활지도/안전": 1,
-        "수업/학습 문제": 2,
-        "시설/환경": 3,
-        "급식": 3,
-        "기타": 4,
-    }
-    return category_priority.get(category, 3)

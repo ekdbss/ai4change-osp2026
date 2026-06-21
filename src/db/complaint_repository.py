@@ -26,12 +26,15 @@ def create_complaint(
             ai_category,
             final_category,
             ai_confidence,
+            ai_urgency,
+            final_urgency,
+            urgency_confidence,
             priority_level,
             status,
             recommended_department,
             parent_visible_comment
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         record.get("user_id"),
@@ -48,6 +51,9 @@ def create_complaint(
         record.get("ai_category") or record.get("category", "기타"),
         record.get("final_category") or record.get("ai_category") or record.get("category", "기타"),
         record.get("ai_confidence", record.get("confidence")),
+        record.get("ai_urgency", "보통"),
+        record.get("final_urgency") or record.get("ai_urgency", "보통"),
+        record.get("urgency_confidence"),
         int(record.get("priority_level", 3)),
         record.get("status", "접수"),
         record.get("recommended_department", ""),
@@ -81,6 +87,9 @@ def list_complaints() -> list[dict[str, Any]]:
             ai_category,
             final_category,
             ai_confidence,
+            ai_urgency,
+            final_urgency,
+            urgency_confidence,
             priority_level,
             status,
             recommended_department,
@@ -111,6 +120,8 @@ def get_complaint_for_parent(complaint_id: int, student_name: str) -> dict[str, 
             refined_text,
             ai_category,
             final_category,
+            ai_urgency,
+            final_urgency,
             priority_level,
             status,
             recommended_department,
@@ -153,6 +164,7 @@ def update_complaint_review(
     complaint_id: int,
     new_status: str | None = None,
     final_category: str | None = None,
+    final_urgency: str | None = None,
     priority_level: int | None = None,
     parent_visible_comment: str | None = None,
     memo: str = "",
@@ -162,7 +174,7 @@ def update_complaint_review(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT status, final_category, priority_level, parent_visible_comment
+                SELECT status, final_category, final_urgency, priority_level, parent_visible_comment
                 FROM complaints
                 WHERE id = %s
                 """,
@@ -174,6 +186,7 @@ def update_complaint_review(
 
             next_status = new_status or row["status"]
             next_category = final_category or row["final_category"]
+            next_urgency = final_urgency or row["final_urgency"] or "보통"
             next_priority = int(priority_level or row["priority_level"] or 3)
             next_parent_comment = (
                 row.get("parent_visible_comment", "")
@@ -187,6 +200,7 @@ def update_complaint_review(
                 SET
                     status = %s,
                     final_category = %s,
+                    final_urgency = %s,
                     priority_level = %s,
                     parent_visible_comment = %s
                 WHERE id = %s
@@ -194,6 +208,7 @@ def update_complaint_review(
                 (
                     next_status,
                     next_category,
+                    next_urgency,
                     next_priority,
                     next_parent_comment,
                     complaint_id,
@@ -208,12 +223,14 @@ def update_complaint_review(
                     new_status,
                     prev_final_category,
                     new_final_category,
+                    prev_final_urgency,
+                    new_final_urgency,
                     prev_priority_level,
                     new_priority_level,
                     memo,
                     is_parent_visible
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                 """,
                 (
                     complaint_id,
@@ -222,6 +239,8 @@ def update_complaint_review(
                     next_status,
                     row["final_category"],
                     next_category,
+                    row["final_urgency"],
+                    next_urgency,
                     row["priority_level"],
                     next_priority,
                     memo,
@@ -257,6 +276,8 @@ def get_status_history(complaint_id: int) -> list[dict[str, Any]]:
                     new_status,
                     prev_final_category,
                     new_final_category,
+                    prev_final_urgency,
+                    new_final_urgency,
                     prev_priority_level,
                     new_priority_level,
                     memo,
@@ -329,4 +350,5 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
 
     row["category"] = row.get("final_category") or row.get("ai_category") or "기타"
     row["confidence"] = row.get("ai_confidence")
+    row["urgency"] = row.get("final_urgency") or row.get("ai_urgency") or "보통"
     return row

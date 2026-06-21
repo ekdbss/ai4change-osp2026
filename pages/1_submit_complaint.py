@@ -150,6 +150,7 @@ with submit_tab:
             )
             st.write(f"제목: {pending['title']}")
             st.caption(f"AI 추천 카테고리: {pending['ai_category']}")
+            st.caption(f"AI 추천 긴급도: {pending.get('ai_urgency', '보통')}")
 
         with preview_col2:
             attachments = st.session_state.get("pending_attachments", [])
@@ -164,7 +165,7 @@ with submit_tab:
         st.success(pending["refined_text"])
 
         if not pending["kobert_model_available"]:
-            st.info("현재 Fine-Tuning된 KoBERT 모델이 없어 데모 분류기가 사용되었습니다.")
+            st.info("현재 Fine-Tuning된 KoBERT 모델이 없어 데모 분류/긴급도 판단기가 사용되었습니다.")
         if not pending["gemini_model_available"]:
             st.info("Gemini 연결이 없어 데모 정제 결과가 사용되었습니다.")
 
@@ -207,6 +208,7 @@ with status_tab:
                 st.write(f"제목: {result['title']}")
                 st.write(f"접수일: {result.get('created_at', '')}")
                 st.write(f"담당 부서: {result.get('recommended_department') or '확인 중'}")
+                st.write(f"처리 긴급도: {result.get('final_urgency') or result.get('ai_urgency') or '보통'}")
 
                 st.markdown("**학교 안내 내용**")
                 comment = result.get("parent_visible_comment")

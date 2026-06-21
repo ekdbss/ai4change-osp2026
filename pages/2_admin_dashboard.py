@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from src.ai.label_map import LABEL_TO_ID
+from src.ai.label_map import priority_for_urgency
 from src.db.connection import is_db_configured
 from src.db.complaint_repository import get_status_history as get_db_status_history
 from src.db.complaint_repository import list_attachments as list_db_attachments
@@ -13,6 +14,7 @@ from src.services import session_store
 admin_user = require_admin_login()
 
 CATEGORIES = list(LABEL_TO_ID.keys())
+URGENCIES = ["높음", "보통", "낮음"]
 STATUSES = ["접수", "검토 중", "처리 완료", "보류"]
 PRIORITIES = [1, 2, 3, 4, 5]
 
@@ -61,6 +63,7 @@ def save_review(
     complaint_id: int,
     status: str,
     final_category: str,
+    final_urgency: str,
     priority_level: int,
     parent_visible_comment: str,
 ) -> None:
@@ -71,6 +74,7 @@ def save_review(
             complaint_id=complaint_id,
             new_status=status,
             final_category=final_category,
+            final_urgency=final_urgency,
             priority_level=priority_level,
             parent_visible_comment=parent_visible_comment,
             memo=memo,
@@ -81,6 +85,7 @@ def save_review(
             complaint_id=complaint_id,
             new_status=status,
             final_category=final_category,
+            final_urgency=final_urgency,
             priority_level=priority_level,
             parent_visible_comment=parent_visible_comment,
             memo=memo,
@@ -124,7 +129,7 @@ with filter_col1:
 with filter_col2:
     category_filter = st.selectbox("확정 카테고리", ["전체", *CATEGORIES])
 with filter_col3:
-    priority_filter = st.selectbox("긴급도", ["전체", *[priority_label(value) for value in PRIORITIES]])
+    urgency_filter = st.selectbox("확정 긴급도", ["전체", *URGENCIES])
 with filter_col4:
     keyword = st.text_input("검색", placeholder="학생명, 학교, 제목, 정제본 검색")
 
@@ -135,10 +140,9 @@ def matches(item: dict) -> bool:
         return False
     if category_filter != "전체" and final_category != category_filter:
         return False
-    if priority_filter != "전체":
-        selected_priority = PRIORITIES[[priority_label(value) for value in PRIORITIES].index(priority_filter)]
-        if int(item.get("priority_level") or 3) != selected_priority:
-            return False
+    final_urgency = item.get("final_urgency") or item.get("ai_urgency") or "보통"
+    if urgency_filter != "전체" and final_urgency != urgency_filter:
+        return False
     if keyword:
         haystack = " ".join(
             [
@@ -172,7 +176,9 @@ with list_col:
                 "제목": item.get("title", ""),
                 "AI 추천": item.get("ai_category", ""),
                 "확정": item.get("final_category") or item.get("ai_category", ""),
-                "긴급도": priority_label(int(item.get("priority_level") or 3)),
+                "AI 긴급도": item.get("ai_urgency", "보통"),
+                "확정 긴급도": item.get("final_urgency") or item.get("ai_urgency", "보통"),
+                "우선순위": priority_label(int(item.get("priority_level") or 3)),
                 "상태": item.get("status", ""),
             }
             for item in filtered
@@ -191,6 +197,7 @@ with detail_col:
         st.info("왼쪽에서 민원을 선택해주세요.")
     else:
         current_final_category = selected.get("final_category") or selected.get("ai_category") or "기타"
+        current_final_urgency = selected.get("final_urgency") or selected.get("ai_urgency") or "보통"
         current_priority = int(selected.get("priority_level") or 3)
 
         st.subheader(selected["title"])
@@ -201,10 +208,11 @@ with detail_col:
             f"{selected.get('student_number', '')}번 {selected.get('student_name', '')}"
         )
 
-        info_cols = st.columns(3)
+        info_cols = st.columns(4)
         info_cols[0].metric("AI 추천 카테고리", selected.get("ai_category", ""))
-        info_cols[1].metric("확정 카테고리", current_final_category)
-        info_cols[2].metric("긴급도", priority_label(current_priority))
+        info_cols[1].metric("AI 추천 긴급도", selected.get("ai_urgency", "보통"))
+        info_cols[2].metric("확정 카테고리", current_final_category)
+        info_cols[3].metric("확정 긴급도", current_final_urgency)
 
         st.markdown("**AI 정제본**")
         st.success(selected.get("refined_text", ""))
@@ -235,7 +243,7 @@ with detail_col:
         st.divider()
         st.markdown("**처리 정보 수정**")
 
-        edit_col1, edit_col2, edit_col3 = st.columns([1, 1, 1])
+        edit_col1, edit_col2, edit_col3, edit_col4 = st.columns([1, 1, 1, 1])
         with edit_col1:
             new_status = st.selectbox(
                 "상태",
@@ -249,10 +257,17 @@ with detail_col:
                 index=index_of(CATEGORIES, current_final_category),
             )
         with edit_col3:
+            new_urgency = st.selectbox(
+                "관리자 확정 긴급도",
+                URGENCIES,
+                index=index_of(URGENCIES, current_final_urgency, default=1),
+            )
+        with edit_col4:
+            suggested_priority = priority_for_urgency(new_urgency)
             new_priority = st.selectbox(
-                "긴급도",
+                "처리 우선순위",
                 PRIORITIES,
-                index=index_of(PRIORITIES, current_priority, default=2),
+                index=index_of(PRIORITIES, current_priority or suggested_priority, default=2),
                 format_func=priority_label,
             )
 
@@ -269,6 +284,7 @@ with detail_col:
                     int(selected["id"]),
                     new_status,
                     new_category,
+                    new_urgency,
                     int(new_priority),
                     parent_comment,
                 )
@@ -286,7 +302,8 @@ with detail_col:
                     "변경일": str(item.get("changed_at", "")),
                     "상태": f"{item.get('prev_status') or '-'} -> {item.get('new_status') or '-'}",
                     "카테고리": f"{item.get('prev_final_category') or '-'} -> {item.get('new_final_category') or '-'}",
-                    "긴급도": f"{item.get('prev_priority_level') or '-'} -> {item.get('new_priority_level') or '-'}",
+                    "긴급도": f"{item.get('prev_final_urgency') or '-'} -> {item.get('new_final_urgency') or '-'}",
+                    "우선순위": f"{item.get('prev_priority_level') or '-'} -> {item.get('new_priority_level') or '-'}",
                     "메모": item.get("memo") or "",
                 }
                 for item in history

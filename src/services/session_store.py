@@ -71,6 +71,7 @@ def update_complaint_review(
     complaint_id: int,
     new_status: str | None = None,
     final_category: str | None = None,
+    final_urgency: str | None = None,
     priority_level: int | None = None,
     parent_visible_comment: str | None = None,
     memo: str = "",
@@ -81,6 +82,7 @@ def update_complaint_review(
             previous_status = complaint.get("status", "접수")
             complaint["status"] = new_status or previous_status
             complaint["final_category"] = final_category or complaint.get("final_category")
+            complaint["final_urgency"] = final_urgency or complaint.get("final_urgency", "보통")
             complaint["priority_level"] = int(priority_level or complaint.get("priority_level", 3))
             if parent_visible_comment is not None:
                 complaint["parent_visible_comment"] = parent_visible_comment
@@ -89,6 +91,7 @@ def update_complaint_review(
                 {
                     "prev_status": previous_status,
                     "new_status": complaint["status"],
+                    "new_final_urgency": complaint["final_urgency"],
                     "memo": memo,
                     "changed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 },
