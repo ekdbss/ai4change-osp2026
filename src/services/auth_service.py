@@ -6,6 +6,7 @@ import os
 import streamlit as st
 
 from src.db.connection import get_connection, is_db_configured
+from src.db.complaint_repository import get_or_create_parent_user
 
 
 ACTIVE_ROLE_KEY = "active_role"
@@ -37,11 +38,12 @@ def is_admin_logged_in() -> bool:
     return get_current_admin() is not None
 
 
-def login_parent(parent_name: str, phone_tail: str) -> None:
+def login_parent(parent_info: dict) -> None:
     _clear_admin_state()
+    parent_user = _resolve_parent_user(parent_info)
     st.session_state["parent_user"] = {
-        "parent_name": parent_name.strip(),
-        "phone_tail": phone_tail.strip(),
+        **parent_user,
+        "phone_tail": parent_info.get("phone_tail", "").strip(),
     }
     st.session_state[ACTIVE_ROLE_KEY] = "parent"
 
@@ -52,10 +54,12 @@ def logout_parent() -> None:
         st.session_state.pop(ACTIVE_ROLE_KEY, None)
 
 
-def login_admin(username: str, password: str) -> bool:
-    admin_user = _verify_admin_from_db(username, password) or _verify_admin_from_env(
+def login_admin(username: str, password: str, region_name: str = "", school_name: str = "") -> bool:
+    admin_user = _verify_admin_from_db(username, password, region_name, school_name) or _verify_admin_from_env(
         username,
         password,
+        region_name,
+        school_name,
     )
     if not admin_user:
         return False
@@ -91,20 +95,47 @@ def require_parent_login() -> dict:
         return parent_user
 
     st.title("학부모 로그인")
-    st.caption("민원 접수와 처리 현황 조회를 위해 간단한 본인 확인 정보를 입력합니다.")
+    st.caption("민원 접수와 현황 조회를 위해 학생 정보를 함께 입력합니다.")
 
     with st.form("parent_login_form"):
-        parent_name = st.text_input("학부모 이름", placeholder="예: 김하윤")
+        parent_name = st.text_input("학부모 이름", value="김병규")
+        parent_type = st.selectbox("학생과의 관계", ["부", "모", "보호자", "기타"])
         phone_tail = st.text_input("전화번호 뒤 4자리", max_chars=4, placeholder="예: 1234")
+        school_name = st.text_input("학교", placeholder="예: 새봄초등학교")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            student_grade = st.text_input("학년", placeholder="예: 3학년")
+        with col2:
+            student_class = st.text_input("반", placeholder="예: 2반")
+        with col3:
+            student_number = st.text_input("출석번호", placeholder="예: 15")
+        student_name = st.text_input("학생 이름", placeholder="예: 김민준")
         submitted = st.form_submit_button("학부모로 시작하기", type="primary", use_container_width=True)
 
     if submitted:
-        if not parent_name.strip():
-            st.warning("학부모 이름을 입력해주세요.")
-        elif not phone_tail.strip().isdigit() or len(phone_tail.strip()) != 4:
-            st.warning("전화번호 뒤 4자리를 숫자로 입력해주세요.")
+        errors = _validate_parent_login(
+            parent_name,
+            phone_tail,
+            school_name,
+            student_class,
+            student_name,
+        )
+        if errors:
+            for error in errors:
+                st.warning(error)
         else:
-            login_parent(parent_name, phone_tail)
+            login_parent(
+                {
+                    "parent_name": parent_name.strip(),
+                    "parent_type": parent_type,
+                    "phone_tail": phone_tail.strip(),
+                    "school_name": school_name.strip(),
+                    "student_grade": student_grade.strip(),
+                    "student_class": student_class.strip(),
+                    "student_number": student_number.strip(),
+                    "student_name": student_name.strip(),
+                }
+            )
             st.rerun()
 
     st.stop()
@@ -124,6 +155,8 @@ def require_admin_login() -> dict:
         with st.sidebar:
             st.caption(f"관리자: {admin_user.get('display_name') or admin_user['username']}")
             st.caption(f"권한: {admin_user.get('role', 'teacher')}")
+            st.caption(f"지역: {admin_user.get('region_name', '')}")
+            st.caption(f"학교: {admin_user.get('school_name', '')}")
             if st.button("관리자 로그아웃", use_container_width=True):
                 logout_admin()
                 st.rerun()
@@ -135,16 +168,60 @@ def require_admin_login() -> dict:
     with st.form("admin_login_form"):
         username = st.text_input("아이디", placeholder="admin")
         password = st.text_input("비밀번호", type="password")
+        region_name = st.text_input("근무 지역", value="서울시교육청")
+        school_name = st.text_input("근무 학교", placeholder="예: 새봄초등학교")
         submitted = st.form_submit_button("관리자로 로그인", type="primary", use_container_width=True)
 
     if submitted:
-        if login_admin(username.strip(), password):
+        if not school_name.strip():
+            st.warning("근무 학교를 입력해주세요.")
+        elif login_admin(username.strip(), password, region_name.strip(), school_name.strip()):
             st.rerun()
         else:
             st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
 
     st.info("데모 기본 계정은 admin / admin1234 입니다. 발표 전에는 .env에서 변경하세요.")
     st.stop()
+
+
+def _resolve_parent_user(parent_info: dict) -> dict:
+    if not is_db_configured():
+        return {
+            "id": None,
+            **parent_info,
+            "phone_masked": f"***-****-{parent_info.get('phone_tail', '')}",
+        }
+
+    try:
+        return get_or_create_parent_user(parent_info)
+    except Exception as exc:
+        st.warning(f"학부모 정보 저장에 실패해 세션으로만 진행합니다. 사유: {exc}")
+        return {
+            "id": None,
+            **parent_info,
+            "phone_masked": f"***-****-{parent_info.get('phone_tail', '')}",
+        }
+
+
+def _validate_parent_login(
+    parent_name: str,
+    phone_tail: str,
+    school_name: str,
+    student_class: str,
+    student_name: str,
+) -> list[str]:
+    errors = []
+    if not parent_name.strip():
+        errors.append("학부모 이름을 입력해주세요.")
+    if not phone_tail.strip().isdigit() or len(phone_tail.strip()) != 4:
+        errors.append("전화번호 뒤 4자리를 숫자로 입력해주세요.")
+    if not school_name.strip():
+        errors.append("학교를 입력해주세요.")
+    if not student_class.strip():
+        errors.append("반 정보를 입력해주세요.")
+    if not student_name.strip():
+        errors.append("학생 이름을 입력해주세요.")
+    return errors
 
 
 def _normalize_single_role(preferred_role: str | None = None) -> None:
@@ -211,7 +288,12 @@ def _render_role_switch_notice(
     st.stop()
 
 
-def _verify_admin_from_db(username: str, password: str) -> dict | None:
+def _verify_admin_from_db(
+    username: str,
+    password: str,
+    region_name: str,
+    school_name: str,
+) -> dict | None:
     if not username or not password or not is_db_configured():
         return None
 
@@ -220,7 +302,7 @@ def _verify_admin_from_db(username: str, password: str) -> dict | None:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, username, password_hash, display_name, role
+                    SELECT id, username, password_hash, display_name, role, region_name, school_name
                     FROM admins
                     WHERE username = %s
                     LIMIT 1
@@ -242,11 +324,18 @@ def _verify_admin_from_db(username: str, password: str) -> dict | None:
         "username": row["username"],
         "display_name": row.get("display_name") or row["username"],
         "role": row.get("role", "teacher"),
+        "region_name": row.get("region_name") or region_name,
+        "school_name": row.get("school_name") or school_name,
         "source": "db",
     }
 
 
-def _verify_admin_from_env(username: str, password: str) -> dict | None:
+def _verify_admin_from_env(
+    username: str,
+    password: str,
+    region_name: str,
+    school_name: str,
+) -> dict | None:
     expected_username = os.getenv("ADMIN_USERNAME", "admin")
     expected_password = os.getenv("ADMIN_PASSWORD", "admin1234")
 
@@ -258,5 +347,7 @@ def _verify_admin_from_env(username: str, password: str) -> dict | None:
         "username": username,
         "display_name": "데모 관리자",
         "role": "admin",
+        "region_name": region_name,
+        "school_name": school_name,
         "source": "env",
     }

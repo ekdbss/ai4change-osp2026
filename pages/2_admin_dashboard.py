@@ -33,10 +33,14 @@ def priority_label(value: int) -> str:
 def load_complaints() -> list[dict]:
     if is_db_configured():
         try:
-            return list_db_complaints()
+            return list_db_complaints(admin_user.get("school_name"))
         except Exception as exc:
             st.warning(f"MySQL 조회에 실패해 데모 저장소를 표시합니다. 사유: {exc}")
-    return session_store.list_complaints()
+    return [
+        item
+        for item in session_store.list_complaints()
+        if item.get("school_name") == admin_user.get("school_name")
+    ]
 
 
 def load_attachments(complaint_id: int) -> list[dict]:
@@ -100,7 +104,10 @@ def index_of(options: list, value, default: int = 0) -> int:
 
 
 st.title("관리자 민원 처리")
-st.caption("AI가 정제한 민원을 확인하고, 담당자가 최종 카테고리와 처리 상태를 관리합니다.")
+st.caption(
+    f"{admin_user.get('region_name', '')} / {admin_user.get('school_name', '')} "
+    "민원만 표시됩니다."
+)
 
 complaints = load_complaints()
 
@@ -160,42 +167,42 @@ def matches(item: dict) -> bool:
 
 filtered = [item for item in complaints if matches(item)]
 
-list_col, detail_col = st.columns([1.05, 1.35], gap="large")
+st.subheader("민원 목록")
+if not filtered:
+    st.info("조건에 맞는 민원이 없습니다.")
+    st.stop()
 
-with list_col:
-    st.subheader("민원 목록")
-    if not filtered:
-        st.info("조건에 맞는 민원이 없습니다.")
-        selected_id = None
-    else:
-        table_rows = [
-            {
-                "접수번호": item["id"],
-                "접수일": str(item.get("created_at", ""))[:10],
-                "학생": f"{item.get('student_class', '')} {item.get('student_name', '')}",
-                "제목": item.get("title", ""),
-                "AI 추천": item.get("ai_category", ""),
-                "확정": item.get("final_category") or item.get("ai_category", ""),
-                "AI 긴급도": item.get("ai_urgency", "보통"),
-                "확정 긴급도": item.get("final_urgency") or item.get("ai_urgency", "보통"),
-                "우선순위": priority_label(int(item.get("priority_level") or 3)),
-                "상태": item.get("status", ""),
-            }
-            for item in filtered
-        ]
-        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+table_rows = [
+    {
+        "접수번호": item["id"],
+        "접수 시간": str(item.get("created_at", ""))[:16],
+        "학년": item.get("student_grade", ""),
+        "반": item.get("student_class", ""),
+        "출석번호": item.get("student_number", ""),
+        "이름": item.get("student_name", ""),
+        "제목": item.get("title", ""),
+        "AI 카테고리": item.get("ai_category", ""),
+        "확정 카테고리": item.get("final_category") or item.get("ai_category", ""),
+        "AI 긴급도": item.get("ai_urgency", "보통"),
+        "확정 긴급도": item.get("final_urgency") or item.get("ai_urgency", "보통"),
+        "우선순위": priority_label(int(item.get("priority_level") or 3)),
+        "상태": item.get("status", ""),
+    }
+    for item in filtered
+]
+st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
 
-        selected_id = st.selectbox(
-            "상세 확인할 민원",
-            [item["id"] for item in filtered],
-            format_func=lambda item_id: f"#{item_id} - {next(item['title'] for item in filtered if item['id'] == item_id)}",
-        )
+selected_id = st.selectbox(
+    "상세 확인할 민원",
+    [item["id"] for item in filtered],
+    format_func=lambda item_id: f"#{item_id} - {next(item['title'] for item in filtered if item['id'] == item_id)}",
+)
 
-with detail_col:
-    selected = next((item for item in complaints if item.get("id") == selected_id), None)
-    if not selected:
-        st.info("왼쪽에서 민원을 선택해주세요.")
-    else:
+selected = next((item for item in complaints if item.get("id") == selected_id), None)
+if selected:
+    st.divider()
+    detail_left, detail_right = st.columns([1, 1], gap="large")
+    with detail_left:
         current_final_category = selected.get("final_category") or selected.get("ai_category") or "기타"
         current_final_urgency = selected.get("final_urgency") or selected.get("ai_urgency") or "보통"
         current_priority = int(selected.get("priority_level") or 3)
@@ -240,6 +247,7 @@ with detail_col:
         with st.expander("원문 보기"):
             st.write(selected.get("original_text", ""))
 
+    with detail_right:
         st.divider()
         st.markdown("**처리 정보 수정**")
 

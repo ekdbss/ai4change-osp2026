@@ -11,6 +11,11 @@ CREATE TABLE IF NOT EXISTS users (
     parent_name VARCHAR(100),
     parent_type VARCHAR(50),
     phone_masked VARCHAR(50),
+    school_name VARCHAR(100),
+    student_grade VARCHAR(20),
+    student_class VARCHAR(50),
+    student_number VARCHAR(20),
+    student_name VARCHAR(100),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -21,6 +26,8 @@ CREATE TABLE IF NOT EXISTS admins (
     password_hash VARCHAR(255) NOT NULL,
     display_name VARCHAR(100),
     role VARCHAR(50) NOT NULL DEFAULT 'teacher',
+    region_name VARCHAR(100),
+    school_name VARCHAR(100),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -137,6 +144,7 @@ ON DUPLICATE KEY UPDATE
     description = VALUES(description);
 
 CREATE INDEX idx_users_login_id ON users(login_id);
+CREATE INDEX idx_users_student ON users(school_name, student_grade, student_class, student_number, student_name);
 
 CREATE INDEX idx_complaints_user_id ON complaints(user_id);
 CREATE INDEX idx_complaints_ai_category ON complaints(ai_category);

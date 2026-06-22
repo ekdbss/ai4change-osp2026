@@ -1,4 +1,5 @@
 import pandas as pd
+import matplotlib.pyplot as plt
 import streamlit as st
 
 from src.db.connection import is_db_configured
@@ -6,19 +7,44 @@ from src.db.complaint_repository import list_complaints as list_db_complaints
 from src.services.auth_service import require_admin_login
 from src.services import session_store
 
-require_admin_login()
+plt.rcParams["font.family"] = "Malgun Gothic"
+plt.rcParams["axes.unicode_minus"] = False
+
+admin_user = require_admin_login()
 
 st.title("민원 통계")
-st.caption("접수일을 기준으로 카테고리별 민원 발생 흐름을 확인합니다.")
+st.caption(f"{admin_user.get('school_name', '')} 접수 민원을 기준으로 통계를 확인합니다.")
 
 
 def load_complaints() -> list[dict]:
     if is_db_configured():
         try:
-            return list_db_complaints()
+            return list_db_complaints(admin_user.get("school_name"))
         except Exception as exc:
             st.warning(f"MySQL 조회에 실패해 데모 저장소를 표시합니다. 사유: {exc}")
-    return session_store.list_complaints()
+    return [
+        item
+        for item in session_store.list_complaints()
+        if item.get("school_name") == admin_user.get("school_name")
+    ]
+
+
+def horizontal_bar_chart(
+    df: pd.DataFrame,
+    label_column: str,
+    value_column: str,
+    colors: list[str],
+):
+    fig, ax = plt.subplots(figsize=(7, 3.6))
+    ax.barh(df[label_column], df[value_column], color=colors[: len(df)])
+    ax.invert_yaxis()
+    ax.set_xlabel("건수")
+    ax.set_ylabel("")
+    ax.tick_params(axis="y", labelrotation=0)
+    for index, value in enumerate(df[value_column]):
+        ax.text(value + 0.05, index, str(value), va="center")
+    fig.tight_layout()
+    return fig
 
 
 complaints = load_complaints()
@@ -82,7 +108,11 @@ with col1:
         .reset_index(name="건수")
         .sort_values("건수", ascending=False)
     )
-    st.bar_chart(category_counts.set_index("카테고리"), use_container_width=True)
+    category_colors = ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"]
+    st.pyplot(
+        horizontal_bar_chart(category_counts, "카테고리", "건수", category_colors),
+        use_container_width=True,
+    )
 
 with col2:
     st.subheader("상태별 누적 건수")
@@ -92,7 +122,11 @@ with col2:
         .reset_index(name="건수")
         .sort_values("건수", ascending=False)
     )
-    st.bar_chart(status_counts.set_index("상태"), use_container_width=True)
+    status_colors = ["#0f766e", "#1d4ed8", "#166534", "#92400e"]
+    st.pyplot(
+        horizontal_bar_chart(status_counts, "상태", "건수", status_colors),
+        use_container_width=True,
+    )
 
 st.subheader("통계 원자료")
 st.dataframe(

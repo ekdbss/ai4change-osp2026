@@ -6,6 +6,115 @@ from typing import Any
 from src.db.connection import get_connection
 
 
+COMPLAINT_SELECT = """
+    SELECT
+        c.id,
+        c.user_id,
+        c.school_name,
+        c.student_grade,
+        c.student_class,
+        c.student_number,
+        c.student_name,
+        c.title,
+        c.original_text,
+        c.masked_text,
+        c.refined_text,
+        c.structured_json,
+        c.ai_category,
+        c.final_category,
+        c.ai_confidence,
+        c.ai_urgency,
+        c.final_urgency,
+        c.urgency_confidence,
+        c.priority_level,
+        c.status,
+        c.recommended_department,
+        c.parent_visible_comment,
+        c.created_at,
+        c.updated_at,
+        (
+            SELECT MAX(h.changed_at)
+            FROM complaint_status_history h
+            WHERE h.complaint_id = c.id
+              AND h.is_parent_visible = TRUE
+              AND h.memo IS NOT NULL
+              AND h.memo <> ''
+        ) AS parent_comment_updated_at
+    FROM complaints c
+"""
+
+
+def get_or_create_parent_user(parent_info: dict[str, Any]) -> dict[str, Any]:
+    login_id = _build_parent_login_id(parent_info)
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    login_id,
+                    parent_name,
+                    parent_type,
+                    phone_masked,
+                    school_name,
+                    student_grade,
+                    student_class,
+                    student_number,
+                    student_name
+                FROM users
+                WHERE login_id = %s
+                LIMIT 1
+                """,
+                (login_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row
+
+            cursor.execute(
+                """
+                INSERT INTO users (
+                    login_id,
+                    parent_name,
+                    parent_type,
+                    phone_masked,
+                    school_name,
+                    student_grade,
+                    student_class,
+                    student_number,
+                    student_name
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    login_id,
+                    parent_info.get("parent_name", ""),
+                    parent_info.get("parent_type", ""),
+                    _mask_phone_tail(parent_info.get("phone_tail", "")),
+                    parent_info.get("school_name", ""),
+                    parent_info.get("student_grade", ""),
+                    parent_info.get("student_class", ""),
+                    parent_info.get("student_number", ""),
+                    parent_info.get("student_name", ""),
+                ),
+            )
+            user_id = int(cursor.lastrowid)
+        conn.commit()
+
+    return {
+        "id": user_id,
+        "login_id": login_id,
+        "parent_name": parent_info.get("parent_name", ""),
+        "parent_type": parent_info.get("parent_type", ""),
+        "phone_masked": _mask_phone_tail(parent_info.get("phone_tail", "")),
+        "school_name": parent_info.get("school_name", ""),
+        "student_grade": parent_info.get("student_grade", ""),
+        "student_class": parent_info.get("student_class", ""),
+        "student_number": parent_info.get("student_number", ""),
+        "student_name": parent_info.get("student_name", ""),
+    }
+
+
 def create_complaint(
     record: dict[str, Any],
     attachments: list[dict[str, Any]] | None = None,
@@ -69,39 +178,56 @@ def create_complaint(
     return complaint_id
 
 
-def list_complaints() -> list[dict[str, Any]]:
-    sql = """
-        SELECT
-            id,
-            user_id,
-            school_name,
-            student_grade,
-            student_class,
-            student_number,
-            student_name,
-            title,
-            original_text,
-            masked_text,
-            refined_text,
-            structured_json,
-            ai_category,
-            final_category,
-            ai_confidence,
-            ai_urgency,
-            final_urgency,
-            urgency_confidence,
-            priority_level,
-            status,
-            recommended_department,
-            parent_visible_comment,
-            created_at,
-            updated_at
-        FROM complaints
-        ORDER BY priority_level ASC, created_at DESC
+def list_complaints(school_name: str | None = None) -> list[dict[str, Any]]:
+    where_clause = ""
+    params: tuple[Any, ...] = ()
+    if school_name:
+        where_clause = " WHERE c.school_name = %s"
+        params = (school_name,)
+
+    sql = f"""
+        {COMPLAINT_SELECT}
+        {where_clause}
+        ORDER BY c.id ASC
     """
     with get_connection() as conn:
         with conn.cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+
+    return [_normalize_row(row) for row in rows]
+
+
+def list_complaints_for_parent(parent_user: dict[str, Any]) -> list[dict[str, Any]]:
+    user_id = parent_user.get("id")
+    params = [
+        parent_user.get("school_name", ""),
+        parent_user.get("student_grade", ""),
+        parent_user.get("student_class", ""),
+        parent_user.get("student_number", ""),
+        parent_user.get("student_name", ""),
+    ]
+    user_clause = ""
+    if user_id:
+        user_clause = "c.user_id = %s OR"
+        params.insert(0, user_id)
+
+    sql = f"""
+        {COMPLAINT_SELECT}
+        WHERE
+            {user_clause}
+            (
+                c.school_name = %s
+                AND COALESCE(c.student_grade, '') = %s
+                AND c.student_class = %s
+                AND COALESCE(c.student_number, '') = %s
+                AND c.student_name = %s
+            )
+        ORDER BY c.id ASC
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(sql, tuple(params))
             rows = cursor.fetchall()
 
     return [_normalize_row(row) for row in rows]
@@ -137,6 +263,28 @@ def get_complaint_for_parent(complaint_id: int, student_name: str) -> dict[str, 
             cursor.execute(sql, (complaint_id, student_name.strip()))
             row = cursor.fetchone()
     return _normalize_row(row) if row else None
+
+
+def _build_parent_login_id(parent_info: dict[str, Any]) -> str:
+    raw = "|".join(
+        [
+            parent_info.get("parent_name", "").strip(),
+            parent_info.get("phone_tail", "").strip(),
+            parent_info.get("school_name", "").strip(),
+            parent_info.get("student_grade", "").strip(),
+            parent_info.get("student_class", "").strip(),
+            parent_info.get("student_number", "").strip(),
+            parent_info.get("student_name", "").strip(),
+        ]
+    )
+    import hashlib
+
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _mask_phone_tail(phone_tail: str) -> str:
+    tail = str(phone_tail).strip()
+    return f"***-****-{tail}" if tail else ""
 
 
 def list_attachments(complaint_id: int, include_data: bool = False) -> list[dict[str, Any]]:
