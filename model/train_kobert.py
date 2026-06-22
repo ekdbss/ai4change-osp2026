@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -78,7 +79,11 @@ def load_training_dataframe() -> pd.DataFrame:
     return df
 
 
-def split_and_save(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def split_and_save(
+    df: pd.DataFrame,
+    max_train_samples: int | None = None,
+    max_valid_samples: int | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     from sklearn.model_selection import train_test_split
 
     stratify_key = df["category"].astype(str) + "_" + df["urgency"].astype(str)
@@ -108,7 +113,24 @@ def split_and_save(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     train_df[columns].to_csv(PROCESSED_DIR / "train.csv", index=False, encoding="utf-8-sig")
     valid_df[columns].to_csv(PROCESSED_DIR / "valid.csv", index=False, encoding="utf-8-sig")
     test_df[columns].to_csv(PROCESSED_DIR / "test.csv", index=False, encoding="utf-8-sig")
+
+    if max_train_samples:
+        train_df = _sample_balanced(train_df, max_train_samples)
+    if max_valid_samples:
+        valid_df = _sample_balanced(valid_df, max_valid_samples)
+
     return train_df, valid_df, test_df
+
+
+def _sample_balanced(df: pd.DataFrame, sample_count: int) -> pd.DataFrame:
+    if sample_count >= len(df):
+        return df
+    return (
+        df.groupby("category", group_keys=False)
+        .apply(lambda group: group.sample(min(len(group), max(1, sample_count // 6)), random_state=42))
+        .sample(frac=1, random_state=42)
+        .reset_index(drop=True)
+    )
 
 
 def train_task(
@@ -118,6 +140,10 @@ def train_task(
     label_column: str,
     label_map: dict[str, int],
     tokenizer,
+    epochs: float,
+    batch_size: int,
+    max_length: int,
+    freeze_base: bool,
 ) -> None:
     from transformers import AutoModelForSequenceClassification, Trainer, TrainingArguments
 
@@ -128,26 +154,31 @@ def train_task(
         id2label=id_to_label,
         label2id=label_map,
     )
+    if freeze_base:
+        for name, parameter in model.named_parameters():
+            parameter.requires_grad = name.startswith("classifier")
 
     train_dataset = ComplaintDataset(
         train_df["text"].tolist(),
         train_df[label_column].astype(int).tolist(),
         tokenizer,
+        max_length=max_length,
     )
     valid_dataset = ComplaintDataset(
         valid_df["text"].tolist(),
         valid_df[label_column].astype(int).tolist(),
         tokenizer,
+        max_length=max_length,
     )
 
     training_args = TrainingArguments(
         output_dir=str(CHECKPOINT_DIR / task_name),
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         learning_rate=2e-5,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=16,
-        num_train_epochs=4,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        num_train_epochs=epochs,
         weight_decay=0.01,
         load_best_model_at_end=True,
         metric_for_best_model="f1",
@@ -161,7 +192,7 @@ def train_task(
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=valid_dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         compute_metrics=compute_metrics,
     )
 
@@ -180,12 +211,55 @@ def train_task(
 def main() -> None:
     from transformers import AutoTokenizer
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", type=float, default=4)
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--max-train-samples", type=int, default=0)
+    parser.add_argument("--max-valid-samples", type=int, default=0)
+    parser.add_argument("--max-length", type=int, default=128)
+    parser.add_argument("--freeze-base", action="store_true")
+    parser.add_argument(
+        "--tasks",
+        nargs="+",
+        choices=["category", "urgency"],
+        default=["category", "urgency"],
+    )
+    args = parser.parse_args()
+
     df = load_training_dataframe()
-    train_df, valid_df, _ = split_and_save(df)
+    train_df, valid_df, _ = split_and_save(
+        df,
+        max_train_samples=args.max_train_samples or None,
+        max_valid_samples=args.max_valid_samples or None,
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-    train_task("category", train_df, valid_df, "category_id", LABEL_TO_ID, tokenizer)
-    train_task("urgency", train_df, valid_df, "urgency_id", URGENCY_TO_ID, tokenizer)
+    if "category" in args.tasks:
+        train_task(
+            "category",
+            train_df,
+            valid_df,
+            "category_id",
+            LABEL_TO_ID,
+            tokenizer,
+            args.epochs,
+            args.batch_size,
+            args.max_length,
+            args.freeze_base,
+        )
+    if "urgency" in args.tasks:
+        train_task(
+            "urgency",
+            train_df,
+            valid_df,
+            "urgency_id",
+            URGENCY_TO_ID,
+            tokenizer,
+            args.epochs,
+            args.batch_size,
+            args.max_length,
+            args.freeze_base,
+        )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIR / "task_config.json").write_text(

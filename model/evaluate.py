@@ -4,6 +4,9 @@ import json
 import sys
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
@@ -21,6 +24,8 @@ sys.path.append(str(ROOT_DIR))
 
 from src.ai.label_map import LABEL_TO_ID, URGENCY_TO_ID, normalize_category
 
+plt.rcParams["font.family"] = "Malgun Gothic"
+plt.rcParams["axes.unicode_minus"] = False
 
 MODEL_DIR = ROOT_DIR / "model/saved_model"
 TEST_PATH = ROOT_DIR / "data/processed/test.csv"

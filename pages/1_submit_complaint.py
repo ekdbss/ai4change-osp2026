@@ -1,3 +1,5 @@
+import base64
+
 import pandas as pd
 import streamlit as st
 
@@ -37,6 +39,63 @@ def to_attachment_records(uploaded_files: list) -> list[dict]:
             }
         )
     return records
+
+
+def format_file_size(size: int | None) -> str:
+    size = int(size or 0)
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    if size >= 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size} bytes"
+
+
+def render_attachment_preview(item: dict, key_prefix: str) -> None:
+    file_name = item.get("file_name", "attachment")
+    mime_type = item.get("mime_type") or ""
+    file_data = item.get("file_data")
+    file_size = format_file_size(item.get("file_size"))
+
+    st.caption(f"{file_name} · {file_size}")
+    if not file_data:
+        st.write("미리보기할 수 있는 파일 데이터가 없습니다.")
+        return
+
+    if mime_type.startswith("image/"):
+        st.image(file_data, caption=file_name, use_container_width=True)
+        return
+
+    if mime_type == "application/pdf":
+        encoded_pdf = base64.b64encode(file_data).decode("utf-8")
+        st.markdown(
+            f"""
+            <iframe
+                src="data:application/pdf;base64,{encoded_pdf}"
+                width="100%"
+                height="420"
+                style="border:1px solid #e5e7eb;border-radius:6px;"
+            ></iframe>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.download_button(
+            "PDF 다운로드",
+            data=file_data,
+            file_name=file_name,
+            mime=mime_type,
+            key=f"{key_prefix}-{file_name}",
+            use_container_width=True,
+        )
+        return
+
+    st.download_button(
+        "첨부파일 다운로드",
+        data=file_data,
+        file_name=file_name,
+        mime=mime_type or "application/octet-stream",
+        key=f"{key_prefix}-{file_name}",
+        use_container_width=True,
+    )
 
 
 def save_pending_complaint() -> int:
@@ -189,8 +248,9 @@ with submit_tab:
             attachments = st.session_state.get("pending_attachments", [])
             st.markdown("**첨부파일**")
             if attachments:
-                for item in attachments:
-                    st.write(f"- {item['file_name']} ({item['file_size']:,} bytes)")
+                for index, item in enumerate(attachments, start=1):
+                    with st.container(border=True):
+                        render_attachment_preview(item, f"pending-attachment-{index}")
             else:
                 st.write("첨부파일 없음")
 
