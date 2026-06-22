@@ -10,6 +10,25 @@ from src.db.complaint_repository import get_or_create_parent_user
 
 
 ACTIVE_ROLE_KEY = "active_role"
+EDUCATION_OFFICES = [
+    "서울특별시교육청",
+    "부산광역시교육청",
+    "대구광역시교육청",
+    "인천광역시교육청",
+    "광주광역시교육청",
+    "대전광역시교육청",
+    "울산광역시교육청",
+    "세종특별자치시교육청",
+    "경기도교육청",
+    "강원특별자치도교육청",
+    "충청북도교육청",
+    "충청남도교육청",
+    "전북특별자치도교육청",
+    "전라남도교육청",
+    "경상북도교육청",
+    "경상남도교육청",
+    "제주특별자치도교육청",
+]
 
 
 def hash_password(password: str) -> str:
@@ -168,7 +187,7 @@ def require_admin_login() -> dict:
     with st.form("admin_login_form"):
         username = st.text_input("아이디", placeholder="admin")
         password = st.text_input("비밀번호", type="password")
-        region_name = st.text_input("근무 지역", value="서울시교육청")
+        region_name = st.selectbox("교육청", EDUCATION_OFFICES)
         school_name = st.text_input("근무 학교", placeholder="예: 새봄초등학교")
         submitted = st.form_submit_button("관리자로 로그인", type="primary", use_container_width=True)
 
@@ -324,8 +343,8 @@ def _verify_admin_from_db(
         "username": row["username"],
         "display_name": row.get("display_name") or row["username"],
         "role": row.get("role", "teacher"),
-        "region_name": row.get("region_name") or region_name,
-        "school_name": row.get("school_name") or school_name,
+        "region_name": region_name or row.get("region_name"),
+        "school_name": school_name or row.get("school_name"),
         "source": "db",
     }
 

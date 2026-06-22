@@ -29,20 +29,37 @@ def load_complaints() -> list[dict]:
     ]
 
 
-def horizontal_bar_chart(
+def palette_from_colormap(name: str, count: int, start: float = 0.1, end: float = 0.9) -> list:
+    if count <= 0:
+        return []
+    cmap = plt.get_cmap(name)
+    if count == 1:
+        return [cmap((start + end) / 2)]
+    return [cmap(start + (end - start) * index / (count - 1)) for index in range(count)]
+
+
+def vertical_bar_chart(
     df: pd.DataFrame,
     label_column: str,
     value_column: str,
-    colors: list[str],
+    colors: list,
 ):
-    fig, ax = plt.subplots(figsize=(7, 3.6))
-    ax.barh(df[label_column], df[value_column], color=colors[: len(df)])
-    ax.invert_yaxis()
-    ax.set_xlabel("건수")
-    ax.set_ylabel("")
-    ax.tick_params(axis="y", labelrotation=0)
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    positions = range(len(df))
+    values = df[value_column].astype(int).tolist()
+
+    ax.bar(positions, values, color=colors[: len(df)], width=0.62)
+    ax.set_xticks(list(positions))
+    ax.set_xticklabels(df[label_column], rotation=0, ha="center")
+    ax.set_ylabel("건수")
+    ax.set_xlabel("")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="y", alpha=0.18)
+
+    max_value = max(values) if values else 0
+    ax.set_ylim(0, max_value + max(1, max_value * 0.18))
     for index, value in enumerate(df[value_column]):
-        ax.text(value + 0.05, index, str(value), va="center")
+        ax.text(index, value + 0.05, str(value), ha="center", va="bottom")
     fig.tight_layout()
     return fig
 
@@ -98,35 +115,31 @@ daily_urgency = (
 )
 st.line_chart(daily_urgency, use_container_width=True)
 
-col1, col2 = st.columns(2)
+st.subheader("카테고리별 누적 건수")
+category_counts = (
+    df.groupby("카테고리")
+    .size()
+    .reset_index(name="건수")
+    .sort_values("건수", ascending=False)
+)
+category_colors = palette_from_colormap("rainbow", len(category_counts), start=0.05, end=0.95)
+st.pyplot(
+    vertical_bar_chart(category_counts, "카테고리", "건수", category_colors),
+    use_container_width=True,
+)
 
-with col1:
-    st.subheader("카테고리별 누적 건수")
-    category_counts = (
-        df.groupby("카테고리")
-        .size()
-        .reset_index(name="건수")
-        .sort_values("건수", ascending=False)
-    )
-    category_colors = ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2"]
-    st.pyplot(
-        horizontal_bar_chart(category_counts, "카테고리", "건수", category_colors),
-        use_container_width=True,
-    )
-
-with col2:
-    st.subheader("상태별 누적 건수")
-    status_counts = (
-        df.groupby("상태")
-        .size()
-        .reset_index(name="건수")
-        .sort_values("건수", ascending=False)
-    )
-    status_colors = ["#0f766e", "#1d4ed8", "#166534", "#92400e"]
-    st.pyplot(
-        horizontal_bar_chart(status_counts, "상태", "건수", status_colors),
-        use_container_width=True,
-    )
+st.subheader("상태별 누적 건수")
+status_counts = (
+    df.groupby("상태")
+    .size()
+    .reset_index(name="건수")
+    .sort_values("건수", ascending=False)
+)
+status_colors = palette_from_colormap("Blues", len(status_counts), start=0.35, end=0.85)
+st.pyplot(
+    vertical_bar_chart(status_counts, "상태", "건수", status_colors),
+    use_container_width=True,
+)
 
 st.subheader("통계 원자료")
 st.dataframe(

@@ -251,26 +251,28 @@ if selected:
         st.divider()
         st.markdown("**처리 정보 수정**")
 
-        edit_col1, edit_col2, edit_col3, edit_col4 = st.columns([1, 1, 1, 1])
-        with edit_col1:
+        edit_row1_col1, edit_row1_col2 = st.columns(2)
+        with edit_row1_col1:
             new_status = st.selectbox(
                 "상태",
                 STATUSES,
                 index=index_of(STATUSES, selected.get("status", "접수")),
             )
-        with edit_col2:
+        with edit_row1_col2:
             new_category = st.selectbox(
-                "관리자 확정 카테고리",
+                "확정 카테고리",
                 CATEGORIES,
                 index=index_of(CATEGORIES, current_final_category),
             )
-        with edit_col3:
+
+        edit_row2_col1, edit_row2_col2 = st.columns(2)
+        with edit_row2_col1:
             new_urgency = st.selectbox(
-                "관리자 확정 긴급도",
+                "확정 긴급도",
                 URGENCIES,
                 index=index_of(URGENCIES, current_final_urgency, default=1),
             )
-        with edit_col4:
+        with edit_row2_col2:
             suggested_priority = priority_for_urgency(new_urgency)
             new_priority = st.selectbox(
                 "처리 우선순위",
