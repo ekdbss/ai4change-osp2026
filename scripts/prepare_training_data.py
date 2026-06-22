@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import sys
 
@@ -13,6 +14,7 @@ from src.ai.label_map import department_for_category, normalize_category
 
 RAW_DATA_PATH = ROOT_DIR / "data/raw/generated_complaints.csv"
 OUTPUT_PATH = ROOT_DIR / "data/raw/generated_complaints_multitask.csv"
+VALID_URGENCIES = {"낮음", "보통", "높음"}
 
 HIGH_URGENCY_KEYWORDS = [
     "사고",
@@ -69,10 +71,15 @@ def infer_urgency(text: str, category: str) -> str:
 
 
 def main() -> None:
-    if not RAW_DATA_PATH.exists():
-        raise FileNotFoundError(f"원본 데이터셋을 찾을 수 없습니다: {RAW_DATA_PATH}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=Path, default=RAW_DATA_PATH)
+    parser.add_argument("--output", type=Path, default=OUTPUT_PATH)
+    args = parser.parse_args()
 
-    df = pd.read_csv(RAW_DATA_PATH)
+    if not args.input.exists():
+        raise FileNotFoundError(f"원본 데이터셋을 찾을 수 없습니다: {args.input}")
+
+    df = pd.read_csv(args.input)
     if "text" not in df.columns:
         raise ValueError("원본 데이터셋에는 text 컬럼이 필요합니다.")
 
@@ -83,15 +90,25 @@ def main() -> None:
     prepared = pd.DataFrame()
     prepared["text"] = df["text"].astype(str).str.strip()
     prepared["category"] = df[category_column].map(normalize_category)
-    prepared["urgency"] = prepared.apply(
-        lambda row: infer_urgency(row["text"], row["category"]),
-        axis=1,
-    )
+    if "urgency" in df.columns:
+        prepared["urgency"] = df["urgency"].astype(str).str.strip()
+        invalid_mask = ~prepared["urgency"].isin(VALID_URGENCIES)
+        if invalid_mask.any():
+            prepared.loc[invalid_mask, "urgency"] = prepared[invalid_mask].apply(
+                lambda row: infer_urgency(row["text"], row["category"]),
+                axis=1,
+            )
+    else:
+        prepared["urgency"] = prepared.apply(
+            lambda row: infer_urgency(row["text"], row["category"]),
+            axis=1,
+        )
     prepared["department"] = prepared["category"].map(department_for_category)
 
-    prepared.to_csv(OUTPUT_PATH, index=False, encoding="utf-8-sig")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    prepared.to_csv(args.output, index=False, encoding="utf-8-sig")
 
-    print(f"saved: {OUTPUT_PATH}")
+    print(f"saved: {args.output}")
     print(prepared[["category", "urgency"]].value_counts().sort_index())
 
 
