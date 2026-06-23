@@ -43,7 +43,7 @@ REFINE_PROMPT = """
 STRUCTURE_PROMPT = """
 너는 학교 민원을 행정 처리용 JSON으로 구조화하는 전문가다.
 
-아래 민원을 분석하여 반드시 JSON만 출력하라.
+아래 민원에서 관리자가 반드시 알아야 할 핵심 정보만 객관적으로 추출하여 반드시 JSON만 출력하라.
 
 출력 스키마:
 {{
@@ -86,6 +86,7 @@ COMBINED_PROMPT = """
 - 원문에 없는 사실 추가 금지
 
 반드시 JSON만 출력하라.
+구조화 항목은 관리자가 반드시 알아야 할 핵심 정보만 객관적으로 추출한다.
 
 출력 스키마:
 {{
@@ -137,6 +138,26 @@ DEPARTMENT_BY_CATEGORY = {
 
 VALID_URGENCY = {"낮음", "보통", "높음"}
 VALID_DEPARTMENT = {"교무부", "생활안전부", "행정실", "급식실", "시설관리"}
+JSON_GENERATION_CONFIG = {"response_mime_type": "application/json"}
+
+URGENCY_ALIASES = {
+    "상": "높음",
+    "중": "보통",
+    "하": "낮음",
+    "긴급": "높음",
+    "높음": "높음",
+    "보통": "보통",
+    "낮음": "낮음",
+}
+
+DEPARTMENT_ALIASES = {
+    "교무처": "교무부",
+    "학생부": "생활안전부",
+    "생활지도부": "생활안전부",
+    "안전부": "생활안전부",
+    "영양실": "급식실",
+    "시설팀": "시설관리",
+}
 
 
 @dataclass
@@ -176,7 +197,8 @@ class GeminiService:
 
         try:
             response = self.model.generate_content(
-                STRUCTURE_PROMPT.format(complaint_text=complaint_text, category=category)
+                STRUCTURE_PROMPT.format(complaint_text=complaint_text, category=category),
+                generation_config=JSON_GENERATION_CONFIG,
             )
             return self._normalize_structure(
                 self._parse_json(response.text),
@@ -198,7 +220,8 @@ class GeminiService:
 
         try:
             response = self.model.generate_content(
-                COMBINED_PROMPT.format(complaint_text=complaint_text, category=category)
+                COMBINED_PROMPT.format(complaint_text=complaint_text, category=category),
+                generation_config=JSON_GENERATION_CONFIG,
             )
             parsed = self._parse_json(response.text)
             refined = parsed.get("refined") or self._fallback_refine(complaint_text)
@@ -257,20 +280,38 @@ class GeminiService:
         normalized = {
             "summary": structured.get("summary") or complaint_text[:80],
             "request": structured.get("request") or "관련 내용 확인 및 필요한 조치를 요청합니다.",
-            "urgency": structured.get("urgency") or "보통",
+            "urgency": self._normalize_urgency(structured.get("urgency")),
             "stakeholders": structured.get("stakeholders") or ["학부모", "학생", "학교 담당자"],
-            "incident_date": structured.get("incident_date") or "",
-            "recommended_department": structured.get("recommended_department") or fallback_department,
+            "incident_date": self._normalize_incident_date(structured.get("incident_date")),
+            "recommended_department": self._normalize_department(
+                structured.get("recommended_department"),
+                fallback_department,
+            ),
         }
 
         if normalized["urgency"] not in VALID_URGENCY:
             normalized["urgency"] = "보통"
-        if normalized["recommended_department"] not in VALID_DEPARTMENT:
-            normalized["recommended_department"] = fallback_department
         if not isinstance(normalized["stakeholders"], list):
             normalized["stakeholders"] = [str(normalized["stakeholders"])]
 
         return normalized
+
+    def _normalize_urgency(self, urgency: object) -> str:
+        value = str(urgency or "").strip()
+        return URGENCY_ALIASES.get(value, "보통")
+
+    def _normalize_department(self, department: object, fallback_department: str) -> str:
+        value = str(department or "").strip()
+        value = DEPARTMENT_ALIASES.get(value, value)
+        if value not in VALID_DEPARTMENT:
+            return fallback_department
+        return value
+
+    def _normalize_incident_date(self, incident_date: object) -> str:
+        value = str(incident_date or "").strip()
+        if value in {"알 수 없음", "불명", "미상", "없음", "파악 불가"}:
+            return ""
+        return value
 
     def _fallback_refine(self, complaint_text: str) -> str:
         return (
