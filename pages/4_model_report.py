@@ -6,7 +6,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.ai.label_map import LABEL_TO_ID, normalize_category
+from src.ai.label_map import LABEL_TO_ID, URGENCY_TO_ID, normalize_category
+from src.ai.model_artifacts import ensure_model_artifacts
 from src.config import get_model_path
 from src.services.auth_service import require_admin_login
 
@@ -14,7 +15,8 @@ from src.services.auth_service import require_admin_login
 admin_user = require_admin_login()
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DATA_PATH = ROOT_DIR / "data/raw/generated_complaints.csv"
+FINAL_DATA_PATH = ROOT_DIR / "data/raw/generated_complaints_final_1800.csv"
+FALLBACK_DATA_PATH = ROOT_DIR / "data/raw/generated_complaints.csv"
 PROCESSED_DIR = ROOT_DIR / "data/processed"
 REPORT_DIR = ROOT_DIR / "reports"
 MODEL_DIR = Path(get_model_path())
@@ -42,26 +44,48 @@ def render_metric_block(title: str, metrics: dict) -> None:
 
 
 def model_exists(task_name: str) -> bool:
-    return (MODEL_DIR / task_name / "config.json").exists()
+    return bool(artifact_status.get(f"{task_name}_ready"))
+
+
+def load_dataset() -> tuple[pd.DataFrame | None, Path]:
+    data_path = FINAL_DATA_PATH if FINAL_DATA_PATH.exists() else FALLBACK_DATA_PATH
+    if not data_path.exists():
+        return None, data_path
+
+    dataset = pd.read_csv(data_path)
+    category_column = "category" if "category" in dataset.columns else "label"
+    dataset["category"] = dataset[category_column].map(normalize_category)
+    return dataset, data_path
 
 
 st.title("AI 모델 리포트")
 st.caption(f"{admin_user.get('school_name', '')} 관리자 검증용 화면입니다.")
 
-model_col1, model_col2, model_col3 = st.columns(3)
+artifact_status = ensure_model_artifacts(MODEL_DIR)
+model_col1, model_col2, model_col3, model_col4 = st.columns(4)
 model_col1.metric("카테고리 모델", "연결됨" if model_exists("category") else "없음")
 model_col2.metric("긴급도 모델", "연결됨" if model_exists("urgency") else "없음")
-model_col3.metric("모델 경로", str(MODEL_DIR.name))
+model_col3.metric("모델 크기", f"{artifact_status['category_size_mb'] + artifact_status['urgency_size_mb']:.1f} MB")
+model_col4.metric("모델 경로", str(MODEL_DIR.name))
+if artifact_status.get("download_error"):
+    st.warning(artifact_status["download_error"])
 
-if DATA_PATH.exists():
-    dataset = pd.read_csv(DATA_PATH)
-    category_column = "category" if "category" in dataset.columns else "label"
-    dataset["category"] = dataset[category_column].map(normalize_category)
-
-    st.subheader("학습 데이터셋")
-    data_col1, data_col2 = st.columns([1, 2])
+dataset, dataset_path = load_dataset()
+if dataset is not None:
+    st.subheader("직접 구축 학습 데이터셋")
+    data_col1, data_col2, data_col3 = st.columns([1, 1, 2])
     data_col1.metric("전체 문장 수", f"{len(dataset):,}")
     data_col1.metric("카테고리 수", f"{dataset['category'].nunique():,}")
+    if "urgency" in dataset.columns:
+        data_col2.metric("긴급도 라벨 수", f"{dataset['urgency'].nunique():,}")
+        urgency_counts = (
+            dataset["urgency"]
+            .value_counts()
+            .reindex(URGENCY_TO_ID.keys(), fill_value=0)
+            .reset_index()
+        )
+        urgency_counts.columns = ["긴급도", "건수"]
+        data_col2.dataframe(urgency_counts, use_container_width=True, hide_index=True)
     counts = (
         dataset["category"]
         .value_counts()
@@ -69,7 +93,8 @@ if DATA_PATH.exists():
         .reset_index()
     )
     counts.columns = ["카테고리", "건수"]
-    data_col2.dataframe(counts, use_container_width=True, hide_index=True)
+    data_col3.dataframe(counts, use_container_width=True, hide_index=True)
+    st.caption(f"사용 데이터셋: {dataset_path.relative_to(ROOT_DIR)}")
 else:
     st.warning("학습 데이터셋 파일을 찾을 수 없습니다.")
 
@@ -80,7 +105,16 @@ if PROCESSED_DIR.exists():
         if split_path.exists():
             split_rows.append({"데이터": split_name, "건수": len(pd.read_csv(split_path))})
     if split_rows:
+        st.subheader("학습/검증/테스트 분할")
         st.dataframe(pd.DataFrame(split_rows), use_container_width=True, hide_index=True)
+
+st.subheader("학습 파이프라인")
+st.code(
+    "python scripts/prepare_training_data.py --input data/raw/generated_complaints_final_1800.csv\n"
+    "python model/train_kobert.py --epochs 6 --batch-size 16 --max-length 128\n"
+    "python model/evaluate.py",
+    language="bash",
+)
 
 metrics = load_json(REPORT_DIR / "multitask_metrics.json")
 if not metrics:

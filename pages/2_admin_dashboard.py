@@ -3,6 +3,8 @@ import streamlit as st
 
 from src.ai.label_map import LABEL_TO_ID
 from src.ai.label_map import priority_for_urgency
+from src.ai.model_artifacts import ensure_model_artifacts
+from src.config import get_model_path
 from src.db.connection import is_db_configured
 from src.db.complaint_repository import get_status_history as get_db_status_history
 from src.db.complaint_repository import list_attachments as list_db_attachments
@@ -17,6 +19,7 @@ CATEGORIES = list(LABEL_TO_ID.keys())
 URGENCIES = ["높음", "보통", "낮음"]
 STATUSES = ["접수", "검토 중", "처리 완료", "보류"]
 PRIORITIES = [1, 2, 3, 4, 5]
+TRAINING_DATA_PATH = "data/raw/generated_complaints_final_1800.csv"
 
 
 def priority_label(value: int) -> str:
@@ -108,6 +111,24 @@ st.caption(
     f"{admin_user.get('region_name', '')} / {admin_user.get('school_name', '')} "
     "민원만 표시됩니다."
 )
+
+artifact_status = ensure_model_artifacts(get_model_path())
+with st.expander("KoBERT 학습 모델 상태", expanded=False):
+    status_cols = st.columns(4)
+    status_cols[0].metric("학습 데이터", "1,800건")
+    status_cols[1].metric("카테고리 모델", "연결됨" if artifact_status["category_ready"] else "대기")
+    status_cols[2].metric("긴급도 모델", "연결됨" if artifact_status["urgency_ready"] else "대기")
+    status_cols[3].metric(
+        "모델 크기",
+        f"{artifact_status['category_size_mb'] + artifact_status['urgency_size_mb']:.1f} MB",
+    )
+    st.caption(f"데이터셋: {TRAINING_DATA_PATH}")
+    if artifact_status["model_ready"]:
+        st.success("접수 민원 처리 시 직접 Fine-Tuning한 KoBERT 모델이 우선 사용됩니다.")
+    else:
+        st.info("모델 zip을 설치하면 데모 판단기 대신 Fine-Tuning된 KoBERT 모델을 사용합니다.")
+    if artifact_status.get("download_error"):
+        st.warning(artifact_status["download_error"])
 
 complaints = load_complaints()
 

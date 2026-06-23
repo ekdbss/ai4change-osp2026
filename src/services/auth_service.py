@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import os
 
 import streamlit as st
 
+from src.config import get_env
 from src.db.connection import get_connection, is_db_configured
 from src.db.complaint_repository import get_or_create_parent_user
 
@@ -355,8 +355,8 @@ def _verify_admin_from_env(
     region_name: str,
     school_name: str,
 ) -> dict | None:
-    expected_username = os.getenv("ADMIN_USERNAME", "admin")
-    expected_password = os.getenv("ADMIN_PASSWORD", "admin1234")
+    expected_username = get_env("ADMIN_USERNAME", "admin")
+    expected_password = get_env("ADMIN_PASSWORD", "admin1234")
 
     if username != expected_username or password != expected_password:
         return None

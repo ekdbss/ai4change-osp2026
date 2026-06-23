@@ -47,6 +47,7 @@ def process_complaint(
         "kobert_model_available": prediction["model_available"],
         "category_model_available": prediction.get("category_model_available", False),
         "urgency_model_available": prediction.get("urgency_model_available", False),
+        "load_errors": prediction.get("load_errors", []),
         "gemini_model_available": gemini_result.model_available,
         "top_categories": prediction.get("top_categories", []),
         # Backward-compatible aliases for demo/session code that may still read old keys.

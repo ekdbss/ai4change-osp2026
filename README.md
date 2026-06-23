@@ -39,6 +39,12 @@ streamlit run app.py
 
 MySQL을 사용할 경우 `sql/schema.sql`을 먼저 실행하고 `.env`에 DB 접속 정보를 입력합니다.
 
+## Streamlit Cloud 배포
+
+배포 서버는 로컬 PC의 `.env`, MySQL, 모델 zip 파일을 자동으로 가져가지 않습니다. Cloud 배포 시에는 Streamlit Secrets에 Gemini/MySQL 값을 넣고, KoBERT 모델 zip은 외부 다운로드 URL로 연결합니다.
+
+자세한 절차는 `docs/streamlit-cloud-deployment.md`를 참고합니다.
+
 ## 모델 학습 순서
 
 ```bash
@@ -76,4 +82,3 @@ scc-osp2026/
   prompts/
   scripts/
 ```
-

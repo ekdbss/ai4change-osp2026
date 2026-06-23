@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from src.config import get_env
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
@@ -114,6 +115,17 @@ KoBERT 분류 결과:
 """.strip()
 
 
+TRANSCRIBE_PROMPT = """
+다음 음성은 학부모가 학교 민원을 말로 설명한 내용이다.
+
+규칙:
+- 한국어로 자연스럽게 받아쓴다.
+- 민원 본문에 들어갈 문장만 출력한다.
+- 음성에 없는 사실을 추가하지 않는다.
+- 음성이 불명확하면 들리는 범위까지만 출력한다.
+""".strip()
+
+
 DEPARTMENT_BY_CATEGORY = {
     "수업/학습 문제": "교무부",
     "교사 태도/행동": "교무부",
@@ -136,7 +148,7 @@ class GeminiResult:
 
 class GeminiService:
     def __init__(self, api_key: str | None = None, model_name: str = "gemini-2.5-flash"):
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.api_key = api_key or get_env("GEMINI_API_KEY")
         self.model_name = model_name
         self.model_available = bool(self.api_key) and genai is not None
 
@@ -206,6 +218,24 @@ class GeminiService:
             structured_json=structured,
             model_available=model_available,
         )
+
+    def transcribe_audio(self, audio_bytes: bytes, mime_type: str = "audio/wav") -> tuple[str, bool]:
+        if not self.model_available or not audio_bytes:
+            return "", False
+
+        try:
+            response = self.model.generate_content(
+                [
+                    TRANSCRIBE_PROMPT,
+                    {
+                        "mime_type": mime_type or "audio/wav",
+                        "data": audio_bytes,
+                    },
+                ]
+            )
+            return response.text.strip(), True
+        except Exception:
+            return "", False
 
     def _parse_json(self, raw_text: str) -> dict:
         cleaned = raw_text.replace("```json", "").replace("```", "").strip()

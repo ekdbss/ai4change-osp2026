@@ -10,6 +10,7 @@ from src.ai.label_map import (
     department_for_category,
     priority_for_urgency,
 )
+from src.ai.model_artifacts import ensure_model_artifacts, has_saved_model, task_model_path
 
 
 @dataclass
@@ -24,6 +25,7 @@ class PredictionResult:
     category_model_available: bool
     urgency_model_available: bool
     top_categories: list[dict]
+    load_errors: list[str]
 
     def to_dict(self) -> dict:
         return {
@@ -37,6 +39,7 @@ class PredictionResult:
             "category_model_available": self.category_model_available,
             "urgency_model_available": self.urgency_model_available,
             "top_categories": self.top_categories,
+            "load_errors": self.load_errors,
         }
 
 
@@ -97,6 +100,7 @@ class KeywordFallbackClassifier:
             category_model_available=False,
             urgency_model_available=False,
             top_categories=top_categories,
+            load_errors=[],
         )
 
     def _infer_urgency(self, text: str, category: str) -> str:
@@ -122,48 +126,60 @@ class KoBERTPredictor:
         self.urgency_tokenizer = None
         self.category_id_to_label = ID_TO_LABEL
         self.urgency_id_to_label = ID_TO_URGENCY
+        self.load_errors = []
+
+        artifact_status = ensure_model_artifacts(self.model_path)
+        if artifact_status.get("download_error"):
+            self.load_errors.append(artifact_status["download_error"])
 
         self.category_model_path = self._resolve_task_path("category")
         self.urgency_model_path = self._resolve_task_path("urgency")
-        self.category_model_available = self._has_saved_model(self.category_model_path)
-        self.urgency_model_available = self._has_saved_model(self.urgency_model_path)
+        self.category_model_available = has_saved_model(self.category_model_path)
+        self.urgency_model_available = has_saved_model(self.urgency_model_path)
         self.model_available = self.category_model_available or self.urgency_model_available
 
         if self.model_available:
-            import torch
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            try:
+                import torch
+                from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-            self.torch = torch
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                self.torch = torch
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            if self.category_model_available:
-                self.category_tokenizer = AutoTokenizer.from_pretrained(str(self.category_model_path))
-                self.category_model = AutoModelForSequenceClassification.from_pretrained(
-                    str(self.category_model_path)
-                )
-                self.category_model.to(self.device)
-                self.category_model.eval()
-                self.category_id_to_label = self._load_id_to_label(self.category_model_path)
+                if self.category_model_available:
+                    try:
+                        self.category_tokenizer = AutoTokenizer.from_pretrained(str(self.category_model_path))
+                        self.category_model = AutoModelForSequenceClassification.from_pretrained(
+                            str(self.category_model_path)
+                        )
+                        self.category_model.to(self.device)
+                        self.category_model.eval()
+                        self.category_id_to_label = self._load_id_to_label(self.category_model_path)
+                    except Exception as exc:
+                        self.category_model_available = False
+                        self.load_errors.append(f"category 모델 로딩 실패: {exc}")
 
-            if self.urgency_model_available:
-                self.urgency_tokenizer = AutoTokenizer.from_pretrained(str(self.urgency_model_path))
-                self.urgency_model = AutoModelForSequenceClassification.from_pretrained(
-                    str(self.urgency_model_path)
-                )
-                self.urgency_model.to(self.device)
-                self.urgency_model.eval()
-                self.urgency_id_to_label = self._load_id_to_label(self.urgency_model_path)
+                if self.urgency_model_available:
+                    try:
+                        self.urgency_tokenizer = AutoTokenizer.from_pretrained(str(self.urgency_model_path))
+                        self.urgency_model = AutoModelForSequenceClassification.from_pretrained(
+                            str(self.urgency_model_path)
+                        )
+                        self.urgency_model.to(self.device)
+                        self.urgency_model.eval()
+                        self.urgency_id_to_label = self._load_id_to_label(self.urgency_model_path)
+                    except Exception as exc:
+                        self.urgency_model_available = False
+                        self.load_errors.append(f"urgency 모델 로딩 실패: {exc}")
+            except Exception as exc:
+                self.category_model_available = False
+                self.urgency_model_available = False
+                self.load_errors.append(f"KoBERT 의존성 로딩 실패: {exc}")
+
+            self.model_available = self.category_model_available or self.urgency_model_available
 
     def _resolve_task_path(self, task_name: str) -> Path:
-        task_path = self.model_path / task_name
-        if task_path.exists():
-            return task_path
-        if task_name == "category":
-            return self.model_path
-        return task_path
-
-    def _has_saved_model(self, model_path: Path) -> bool:
-        return (model_path / "config.json").exists()
+        return task_model_path(self.model_path, task_name)
 
     def _load_id_to_label(self, model_path: Path) -> dict[int, str]:
         label_map_path = model_path / "label_map.json"
@@ -177,7 +193,9 @@ class KoBERTPredictor:
     def predict(self, text: str) -> dict:
         fallback = self.fallback.predict(text)
         if not self.model_available:
-            return fallback.to_dict()
+            result = fallback.to_dict()
+            result["load_errors"] = self.load_errors
+            return result
 
         if self.category_model_available:
             category, confidence, top_categories = self._predict_task(
@@ -213,6 +231,7 @@ class KoBERTPredictor:
             category_model_available=self.category_model_available,
             urgency_model_available=self.urgency_model_available,
             top_categories=top_categories,
+            load_errors=self.load_errors,
         ).to_dict()
 
     def _predict_task(self, text: str, tokenizer, model, id_to_label: dict[int, str]):

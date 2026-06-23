@@ -1,7 +1,9 @@
 import base64
+import json
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.ai.gemini_service import GeminiService
 from src.ai.kobert_predictor import KoBERTPredictor
@@ -15,6 +17,9 @@ from src.services.complaint_service import process_complaint
 from src.utils.validators import validate_complaint, validate_student_info
 
 parent_user = require_parent_login()
+
+if "complaint_text_input" not in st.session_state:
+    st.session_state["complaint_text_input"] = ""
 
 
 @st.cache_resource
@@ -98,6 +103,134 @@ def render_attachment_preview(item: dict, key_prefix: str) -> None:
     )
 
 
+def render_tts_control(text: str, component_id: str, label: str = "내용 읽어주기") -> None:
+    safe_text = json.dumps(str(text or ""), ensure_ascii=False)
+    safe_component_id = component_id.replace("-", "_")
+    components.html(
+        f"""
+        <div style="display:flex;gap:8px;align-items:center;margin:4px 0 12px 0;">
+          <button
+            id="{safe_component_id}_speak"
+            style="border:1px solid #d1d5db;border-radius:6px;background:#ffffff;padding:7px 12px;cursor:pointer;font-size:14px;"
+          >
+            {label}
+          </button>
+          <button
+            id="{safe_component_id}_stop"
+            style="border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:7px 12px;cursor:pointer;font-size:14px;"
+          >
+            중지
+          </button>
+        </div>
+        <script>
+          const text_{safe_component_id} = {safe_text};
+          const synth_{safe_component_id} = window.speechSynthesis;
+          document.getElementById("{safe_component_id}_speak").onclick = () => {{
+            if (!text_{safe_component_id}) return;
+            synth_{safe_component_id}.cancel();
+            const utterance = new SpeechSynthesisUtterance(text_{safe_component_id});
+            utterance.lang = "ko-KR";
+            utterance.rate = 0.95;
+            synth_{safe_component_id}.speak(utterance);
+          }};
+          document.getElementById("{safe_component_id}_stop").onclick = () => {{
+            synth_{safe_component_id}.cancel();
+          }};
+        </script>
+        """,
+        height=54,
+    )
+
+
+def render_browser_stt_pad(component_id: str) -> None:
+    safe_component_id = component_id.replace("-", "_")
+    components.html(
+        f"""
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#ffffff;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <button id="{safe_component_id}_start" style="border:1px solid #d1d5db;border-radius:6px;background:#ffffff;padding:7px 12px;cursor:pointer;font-size:14px;">받아쓰기 시작</button>
+            <button id="{safe_component_id}_stop" style="border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:7px 12px;cursor:pointer;font-size:14px;">중지</button>
+            <button id="{safe_component_id}_copy" style="border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#ffffff;padding:7px 12px;cursor:pointer;font-size:14px;">복사</button>
+          </div>
+          <textarea
+            id="{safe_component_id}_text"
+            placeholder="말한 내용이 여기에 표시됩니다."
+            style="box-sizing:border-box;width:100%;min-height:96px;border:1px solid #d1d5db;border-radius:6px;padding:10px;font-size:14px;line-height:1.5;resize:vertical;"
+          ></textarea>
+          <div id="{safe_component_id}_status" style="margin-top:6px;color:#4b5563;font-size:13px;"></div>
+        </div>
+        <script>
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          const statusEl = document.getElementById("{safe_component_id}_status");
+          const textEl = document.getElementById("{safe_component_id}_text");
+          let recognition = null;
+          let finalText = "";
+          let isListening = false;
+
+          if (!SpeechRecognition) {{
+            statusEl.textContent = "이 브라우저에서는 음성 인식을 지원하지 않습니다.";
+            document.getElementById("{safe_component_id}_start").disabled = true;
+          }} else {{
+            recognition = new SpeechRecognition();
+            recognition.lang = "ko-KR";
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.onstart = () => {{
+              isListening = true;
+              statusEl.textContent = "듣고 있습니다.";
+            }};
+            recognition.onerror = (event) => {{
+              statusEl.textContent = "음성 인식이 중단되었습니다: " + event.error;
+            }};
+            recognition.onend = () => {{
+              isListening = false;
+              statusEl.textContent = "중지되었습니다.";
+            }};
+            recognition.onresult = (event) => {{
+              let interimText = "";
+              for (let i = event.resultIndex; i < event.results.length; i++) {{
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {{
+                  finalText += transcript + " ";
+                }} else {{
+                  interimText += transcript;
+                }}
+              }}
+              textEl.value = (finalText + interimText).trim();
+            }};
+          }}
+
+          document.getElementById("{safe_component_id}_start").onclick = () => {{
+            if (!recognition) return;
+            if (isListening) return;
+            try {{
+              recognition.start();
+            }} catch (error) {{
+              statusEl.textContent = "음성 인식을 다시 시작할 수 없습니다.";
+            }}
+          }};
+          document.getElementById("{safe_component_id}_stop").onclick = () => {{
+            if (recognition) recognition.stop();
+          }};
+          document.getElementById("{safe_component_id}_copy").onclick = async () => {{
+            const value = textEl.value.trim();
+            if (!value) return;
+            try {{
+              await navigator.clipboard.writeText(value);
+              statusEl.textContent = "복사되었습니다. 민원 내용 칸에 붙여넣어 주세요.";
+            }} catch (error) {{
+              textEl.focus();
+              textEl.select();
+              document.execCommand("copy");
+              statusEl.textContent = "텍스트를 선택했습니다. 복사가 안 되면 직접 복사해 주세요.";
+            }}
+          }};
+        </script>
+        """,
+        height=220,
+    )
+
+
 def save_pending_complaint() -> int:
     record = st.session_state["pending_complaint"]
     attachments = st.session_state.get("pending_attachments", [])
@@ -156,6 +289,38 @@ submit_tab, status_tab = st.tabs(["민원 접수", "내 민원 현황"])
 with submit_tab:
     st.subheader("학생 정보")
 
+    with st.expander("음성으로 민원 작성하기", expanded=False):
+        st.caption("녹음 후 텍스트 변환을 누르면 민원 내용 칸에 반영됩니다.")
+        audio_file = st.audio_input("민원 내용을 말로 녹음해 주세요.", key="complaint_audio_input")
+        if st.button(
+            "녹음 내용 텍스트로 변환",
+            disabled=audio_file is None,
+            use_container_width=True,
+        ):
+            gemini_service = load_gemini()
+            if not gemini_service.model_available:
+                st.warning("Gemini 연결값이 없어 녹음 파일을 텍스트로 변환할 수 없습니다.")
+            else:
+                with st.spinner("녹음 내용을 텍스트로 변환하고 있습니다."):
+                    transcript, used_model = gemini_service.transcribe_audio(
+                        audio_file.getvalue(),
+                        getattr(audio_file, "type", None) or "audio/wav",
+                    )
+
+                if transcript and used_model:
+                    current_text = st.session_state.get("complaint_text_input", "").strip()
+                    if current_text:
+                        st.session_state["complaint_text_input"] = f"{current_text}\n{transcript}".strip()
+                    else:
+                        st.session_state["complaint_text_input"] = transcript
+                    st.success("녹음 내용을 민원 내용 칸에 넣었습니다.")
+                    st.rerun()
+                else:
+                    st.warning("음성 변환에 실패했습니다. 잠시 후 다시 시도하거나 아래 받아쓰기를 이용해 주세요.")
+
+        st.caption("브라우저 받아쓰기는 API 없이 동작합니다. 인식된 문장을 복사해 민원 내용 칸에 붙여넣을 수 있습니다.")
+        render_browser_stt_pad("parent-complaint-stt")
+
     with st.form("parent_complaint_form"):
         info_col1, info_col2, info_col3 = st.columns([1.4, 0.8, 0.8])
         with info_col1:
@@ -177,6 +342,7 @@ with submit_tab:
             "민원 내용",
             placeholder="상황, 요청 사항, 확인이 필요한 내용을 적어주세요.",
             height=180,
+            key="complaint_text_input",
         )
         uploaded_files = st.file_uploader(
             "첨부파일",
@@ -256,9 +422,19 @@ with submit_tab:
 
         st.markdown("**정제된 민원 내용**")
         st.success(pending["refined_text"])
+        render_tts_control(pending["refined_text"], "pending-refined-tts", "정제본 읽어주기")
 
-        if not pending["kobert_model_available"]:
+        if pending["kobert_model_available"]:
+            model_parts = []
+            if pending.get("category_model_available"):
+                model_parts.append("카테고리")
+            if pending.get("urgency_model_available"):
+                model_parts.append("긴급도")
+            st.success(f"직접 Fine-Tuning한 KoBERT 모델이 {'/'.join(model_parts)} 판단에 사용되었습니다.")
+        else:
             st.info("현재 Fine-Tuning된 KoBERT 모델이 없어 데모 분류/긴급도 판단기가 사용되었습니다.")
+        for error in pending.get("load_errors", []):
+            st.warning(error)
         if not pending["gemini_model_available"]:
             st.info("Gemini 연결이 없어 데모 정제 결과가 사용되었습니다.")
 
@@ -327,8 +503,10 @@ with status_tab:
             comment_time = result.get("parent_comment_updated_at") or result.get("updated_at")
             st.caption(f"등록일: {comment_time}")
             st.info(comment)
+            render_tts_control(comment, f"comment-tts-{result['id']}", "학교 안내 읽어주기")
         else:
             st.write("아직 등록된 안내 내용이 없습니다.")
 
         st.markdown("**접수된 정제 민원**")
         st.write(result["refined_text"])
+        render_tts_control(result["refined_text"], f"status-refined-tts-{result['id']}", "정제 민원 읽어주기")
