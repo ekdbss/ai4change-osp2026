@@ -67,6 +67,39 @@ KOBERT_MODEL_ZIP_SHA256 = ""
 
 DB를 만든 뒤 `sql/schema.sql`을 실행한다.
 
+### Aiven for MySQL 사용 시
+
+Aiven의 기본 DB 이름이 `defaultdb`라면 Streamlit Secrets에는 `DB_NAME = "defaultdb"`를 넣는다.
+이 프로젝트의 `scripts/init_database.py`는 `sql/schema.sql`의 `CREATE DATABASE`와 `USE` 문을 건너뛰고, 현재 `DB_NAME`에 필요한 테이블을 만든다.
+
+로컬 `.env`에 Aiven 연결값을 넣은 뒤 아래 명령을 실행한다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\init_database.py
+```
+
+Aiven 연결 예시는 다음과 같다.
+
+```toml
+DB_HOST = "scc-osp2026-mysql-scc-osp2026.h.aivencloud.com"
+DB_PORT = "23464"
+DB_USER = "avnadmin"
+DB_PASSWORD = "replace-with-aiven-password"
+DB_NAME = "defaultdb"
+DB_SSL_MODE = "REQUIRED"
+```
+
+Aiven 콘솔에서 CA certificate를 제공하는 경우, 더 엄격한 검증을 위해 아래처럼 넣을 수 있다.
+
+```toml
+DB_SSL_MODE = "VERIFY_CA"
+DB_SSL_CA = """
+-----BEGIN CERTIFICATE-----
+replace-with-aiven-ca-certificate
+-----END CERTIFICATE-----
+"""
+```
+
 ## 5. 배포 후 확인 순서
 
 1. Streamlit Cloud에서 앱 배포
