@@ -8,6 +8,7 @@ model/checkpoints/
 reports/*.png
 reports/*.json
 reports/*.txt
+kobert_*.zip
 streamlit.*.log
 .venv/
 venv/
