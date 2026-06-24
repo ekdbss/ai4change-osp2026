@@ -492,7 +492,7 @@ with submit_tab:
         for error in pending.get("load_errors", []):
             st.warning(error)
         if not pending["gemini_model_available"]:
-            st.info("Gemini 연결이 없어 데모 정제 결과가 사용되었습니다.")
+            st.info("Gemini API 사용량 한도 초과로 데모 정제 결과가 사용되었습니다.")
 
         action_col1, action_col2 = st.columns([1, 1])
         with action_col1:
