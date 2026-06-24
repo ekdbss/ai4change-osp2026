@@ -37,13 +37,22 @@ def priority_label(value: int) -> str:
 
 def priority_short_label(value: int) -> str:
     labels = {
-        1: "1 긴급",
-        2: "2 우선",
-        3: "3 일반",
-        4: "4 낮음",
-        5: "5 참고",
+        1: "긴급",
+        2: "우선 검토",
+        3: "일반",
+        4: "낮음",
+        5: "참고",
     }
-    return labels.get(int(value), "3 일반")
+    return labels.get(int(value), "일반")
+
+
+def number_only_label(value) -> str:
+    digits = "".join(char for char in str(value or "") if char.isdigit())
+    return digits or str(value or "")
+
+
+def history_value(value) -> str:
+    return str(value) if value not in (None, "") else "-"
 
 
 def table_height(row_count: int, max_height: int = 460) -> int:
@@ -288,8 +297,8 @@ table_rows = [
     {
         "접수번호": item["id"],
         "접수 시간": str(item.get("created_at", ""))[:16],
-        "학년": item.get("student_grade", ""),
-        "반": item.get("student_class", ""),
+        "학년": number_only_label(item.get("student_grade", "")),
+        "반": number_only_label(item.get("student_class", "")),
         "출석번호": item.get("student_number", ""),
         "이름": item.get("student_name", ""),
         "제목": item.get("title", ""),
@@ -297,7 +306,7 @@ table_rows = [
         "확정 카테고리": item.get("final_category") or item.get("ai_category", ""),
         "AI 긴급도": item.get("ai_urgency", "보통"),
         "확정 긴급도": item.get("final_urgency") or item.get("ai_urgency", "보통"),
-        "우선순위": priority_short_label(int(item.get("priority_level") or 3)),
+        "처리순위": priority_short_label(int(item.get("priority_level") or 3)),
         "상태": item.get("status", ""),
     }
     for item in filtered
@@ -308,19 +317,19 @@ st.dataframe(
     hide_index=True,
     height=table_height(len(table_rows)),
     column_config={
-        "접수번호": st.column_config.NumberColumn("번호", width="small", format="%d"),
-        "접수 시간": st.column_config.TextColumn("접수시간", width="small"),
-        "학년": st.column_config.TextColumn("학년", width="small"),
-        "반": st.column_config.TextColumn("반", width="small"),
-        "출석번호": st.column_config.TextColumn("출석", width="small"),
-        "이름": st.column_config.TextColumn("이름", width="small"),
-        "제목": st.column_config.TextColumn("제목", width="medium"),
-        "AI 카테고리": st.column_config.TextColumn("AI분류", width="small"),
-        "확정 카테고리": st.column_config.TextColumn("확정분류", width="small"),
-        "AI 긴급도": st.column_config.TextColumn("AI긴급", width="small"),
-        "확정 긴급도": st.column_config.TextColumn("확정긴급", width="small"),
-        "우선순위": st.column_config.TextColumn("우선", width="small"),
-        "상태": st.column_config.TextColumn("상태", width="small"),
+        "접수번호": st.column_config.NumberColumn("번호", width=72, format="%d"),
+        "접수 시간": st.column_config.TextColumn("접수시간", width=142),
+        "학년": st.column_config.TextColumn("학년", width=64),
+        "반": st.column_config.TextColumn("반", width=64),
+        "출석번호": st.column_config.TextColumn("출석", width=72),
+        "이름": st.column_config.TextColumn("이름", width=92),
+        "제목": st.column_config.TextColumn("제목", width=280),
+        "AI 카테고리": st.column_config.TextColumn("AI분류", width=150),
+        "확정 카테고리": st.column_config.TextColumn("확정분류", width=150),
+        "AI 긴급도": st.column_config.TextColumn("AI긴급", width=88),
+        "확정 긴급도": st.column_config.TextColumn("확정긴급", width=96),
+        "처리순위": st.column_config.TextColumn("처리순위", width=110),
+        "상태": st.column_config.TextColumn("상태", width=100),
     },
 )
 
@@ -442,10 +451,10 @@ if selected:
         history_rows = [
             {
                 "변경일": str(item.get("changed_at", ""))[:19],
-                "상태": f"{item.get('prev_status') or '-'} -> {item.get('new_status') or '-'}",
-                "카테고리": f"{item.get('prev_final_category') or '-'} -> {item.get('new_final_category') or '-'}",
-                "긴급도": f"{item.get('prev_final_urgency') or '-'} -> {item.get('new_final_urgency') or '-'}",
-                "우선순위": f"{item.get('prev_priority_level') or '-'} -> {item.get('new_priority_level') or '-'}",
+                "상태": history_value(item.get("new_status")),
+                "카테고리": history_value(item.get("new_final_category")),
+                "긴급도": history_value(item.get("new_final_urgency")),
+                "처리순위": priority_short_label(int(item.get("new_priority_level") or 3)),
                 "메모": item.get("memo") or "",
             }
             for item in history
@@ -456,11 +465,11 @@ if selected:
             hide_index=True,
             height=table_height(len(history_rows), max_height=340),
             column_config={
-                "변경일": st.column_config.TextColumn("변경일", width="small"),
-                "상태": st.column_config.TextColumn("상태", width="small"),
-                "카테고리": st.column_config.TextColumn("카테고리", width="medium"),
-                "긴급도": st.column_config.TextColumn("긴급도", width="small"),
-                "우선순위": st.column_config.TextColumn("우선순위", width="small"),
-                "메모": st.column_config.TextColumn("메모", width="large"),
+                "변경일": st.column_config.TextColumn("변경일", width=160),
+                "상태": st.column_config.TextColumn("상태", width=110),
+                "카테고리": st.column_config.TextColumn("카테고리", width=160),
+                "긴급도": st.column_config.TextColumn("긴급도", width=100),
+                "처리순위": st.column_config.TextColumn("처리순위", width=120),
+                "메모": st.column_config.TextColumn("메모", width=520),
             },
         )

@@ -155,7 +155,7 @@ def render_browser_stt_pad(component_id: str) -> None:
           <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
             <button id="{safe_component_id}_start" style="border:1px solid #2563eb;border-radius:10px;background:#2563eb;color:#ffffff;padding:18px 24px;cursor:pointer;font-size:22px;font-weight:800;min-height:64px;flex:1 1 220px;">🎙️ 녹음 시작</button>
             <button id="{safe_component_id}_stop" style="border:1px solid #d1d5db;border-radius:10px;background:#ffffff;color:#374151;padding:18px 24px;cursor:pointer;font-size:20px;font-weight:800;min-height:64px;flex:1 1 140px;">⏹ 중지</button>
-            <button id="{safe_component_id}_copy" style="border:1px solid #0f766e;border-radius:10px;background:#0f766e;color:#ffffff;padding:18px 24px;cursor:pointer;font-size:20px;font-weight:800;min-height:64px;flex:1 1 160px;">복사</button>
+            <button id="{safe_component_id}_insert" style="border:1px solid #0f766e;border-radius:10px;background:#0f766e;color:#ffffff;padding:18px 24px;cursor:pointer;font-size:20px;font-weight:800;min-height:64px;flex:1 1 220px;">민원 내용에 넣기</button>
           </div>
           <textarea
             id="{safe_component_id}_text"
@@ -217,17 +217,60 @@ def render_browser_stt_pad(component_id: str) -> None:
           document.getElementById("{safe_component_id}_stop").onclick = () => {{
             if (recognition) recognition.stop();
           }};
-          document.getElementById("{safe_component_id}_copy").onclick = async () => {{
-            const value = textEl.value.trim();
-            if (!value) return;
+          const copyFallback = async (value) => {{
             try {{
               await navigator.clipboard.writeText(value);
-              statusEl.textContent = "복사되었습니다. 민원 내용 칸에 붙여넣어 주세요.";
+              statusEl.textContent = "자동 입력이 제한되어 복사했습니다. 민원 내용 칸에 붙여넣어 주세요.";
             }} catch (error) {{
               textEl.focus();
               textEl.select();
               document.execCommand("copy");
-              statusEl.textContent = "텍스트를 선택했습니다. 복사가 안 되면 직접 복사해 주세요.";
+              statusEl.textContent = "자동 입력이 제한되었습니다. 선택된 문장을 직접 복사해 주세요.";
+            }}
+          }};
+
+          const setNativeValue = (element, value) => {{
+            const valueSetter = Object.getOwnPropertyDescriptor(element, "value")?.set;
+            const prototype = Object.getPrototypeOf(element);
+            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+            if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {{
+              prototypeValueSetter.call(element, value);
+            }} else if (valueSetter) {{
+              valueSetter.call(element, value);
+            }} else {{
+              element.value = value;
+            }}
+          }};
+
+          const findComplaintTextarea = () => {{
+            const parentDoc = window.parent?.document;
+            if (!parentDoc) return null;
+            const textareas = Array.from(parentDoc.querySelectorAll("textarea"));
+            return (
+              textareas.find((element) => element.getAttribute("aria-label") === "민원 내용") ||
+              textareas.find((element) => element.placeholder?.includes("상황, 요청 사항")) ||
+              null
+            );
+          }};
+
+          document.getElementById("{safe_component_id}_insert").onclick = async () => {{
+            const value = textEl.value.trim();
+            if (!value) return;
+            try {{
+              const target = findComplaintTextarea();
+              if (!target) {{
+                await copyFallback(value);
+                return;
+              }}
+              const currentValue = target.value.trim();
+              const nextValue = currentValue ? currentValue + "\\n" + value : value;
+              setNativeValue(target, nextValue);
+              target.dispatchEvent(new Event("input", {{ bubbles: true }}));
+              target.dispatchEvent(new Event("change", {{ bubbles: true }}));
+              target.focus();
+              statusEl.textContent = "민원 내용 칸에 넣었습니다.";
+            }} catch (error) {{
+              await copyFallback(value);
             }}
           }};
         </script>
@@ -316,13 +359,14 @@ with submit_tab:
     st.subheader("학생 정보")
 
     with st.expander("음성으로 민원 작성하기", expanded=False):
-        st.caption("큰 녹음 버튼을 누르고 말한 뒤, 인식된 문장을 복사해 민원 내용 칸에 붙여넣어 주세요.")
+        st.caption("큰 녹음 버튼을 누르고 말한 뒤, 인식된 문장을 민원 내용 칸에 넣을 수 있습니다.")
         render_browser_stt_pad("parent-complaint-stt")
 
     with st.form("parent_complaint_form"):
         info_col1, info_col2, info_col3 = st.columns([1.4, 0.8, 0.8])
         with info_col1:
-            school_name = st.text_input("학교", value=parent_user.get("school_name", ""))
+            school_name = parent_user.get("school_name", "")
+            st.text_input("학교", value=school_name, disabled=True)
         with info_col2:
             student_grade_number = st.number_input(
                 "학년",
