@@ -29,6 +29,9 @@ EDUCATION_OFFICES = [
     "경상남도교육청",
     "제주특별자치도교육청",
 ]
+DEMO_SCHOOLS_BY_OFFICE = {
+    "서울특별시교육청": ["새봄초등학교", "증산초등학교"],
+}
 
 
 def format_grade_label(value: int) -> str:
@@ -41,6 +44,10 @@ def format_class_label(value: int) -> str:
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def get_demo_school_options(region_name: str) -> list[str]:
+    return DEMO_SCHOOLS_BY_OFFICE.get(region_name, [])
 
 
 def get_current_parent() -> dict | None:
@@ -71,6 +78,8 @@ def login_parent(parent_info: dict) -> None:
     st.session_state["parent_user"] = {
         **parent_user,
         "phone_tail": parent_info.get("phone_tail", "").strip(),
+        "region_name": parent_info.get("region_name", "").strip(),
+        "school_name": parent_info.get("school_name", "").strip(),
     }
     st.session_state[ACTIVE_ROLE_KEY] = "parent"
 
@@ -125,10 +134,16 @@ def require_parent_login() -> dict:
     st.caption("민원 접수와 현황 조회를 위해 학생 정보를 함께 입력합니다.")
 
     with st.form("parent_login_form"):
-        parent_name = st.text_input("학부모 이름", value="김병규")
+        parent_name = st.text_input("학부모 이름")
         parent_type = st.selectbox("학생과의 관계", ["부", "모", "보호자", "기타"])
         phone_tail = st.text_input("전화번호 뒤 4자리", max_chars=4, placeholder="예: 1234")
-        school_name = st.text_input("학교", placeholder="예: 새봄초등학교")
+        region_name = st.selectbox("교육청", EDUCATION_OFFICES)
+        school_options = get_demo_school_options(region_name)
+        if school_options:
+            school_name = st.selectbox("학교", school_options)
+        else:
+            school_name = ""
+            st.info("현재 데모에서는 서울특별시교육청 소속 일부 학교만 선택할 수 있습니다.")
         col1, col2, col3 = st.columns(3)
         with col1:
             student_grade_number = st.number_input("학년", min_value=1, max_value=6, value=3, step=1)
@@ -159,6 +174,7 @@ def require_parent_login() -> dict:
                     "parent_name": parent_name.strip(),
                     "parent_type": parent_type,
                     "phone_tail": phone_tail.strip(),
+                    "region_name": region_name.strip(),
                     "school_name": school_name.strip(),
                     "student_grade": student_grade.strip(),
                     "student_class": student_class.strip(),
@@ -199,7 +215,12 @@ def require_admin_login() -> dict:
         username = st.text_input("아이디", placeholder="admin")
         password = st.text_input("비밀번호", type="password")
         region_name = st.selectbox("교육청", EDUCATION_OFFICES)
-        school_name = st.text_input("근무 학교", placeholder="예: 새봄초등학교")
+        school_options = get_demo_school_options(region_name)
+        if school_options:
+            school_name = st.selectbox("근무 학교", school_options)
+        else:
+            school_name = ""
+            st.info("현재 데모에서는 서울특별시교육청 소속 일부 학교만 선택할 수 있습니다.")
         submitted = st.form_submit_button("관리자로 로그인", type="primary", use_container_width=True)
 
     if submitted:

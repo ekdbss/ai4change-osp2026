@@ -15,6 +15,7 @@ from src.db.connection import get_connection
 
 
 SCHOOL_NAME = "새봄초등학교"
+ADDITIONAL_SCHOOL_NAME = "증산초등학교"
 REGION_NAME = "서울특별시교육청"
 
 PARENTS = [
@@ -44,6 +45,36 @@ PARENTS = [
         "student_class": "3반",
         "student_number": "21",
         "student_name": "최하준",
+    },
+    {
+        "school_name": ADDITIONAL_SCHOOL_NAME,
+        "parent_name": "정유진",
+        "parent_type": "모",
+        "phone_tail": "1357",
+        "student_grade": "2학년",
+        "student_class": "4반",
+        "student_number": "11",
+        "student_name": "한서윤",
+    },
+    {
+        "school_name": ADDITIONAL_SCHOOL_NAME,
+        "parent_name": "오민석",
+        "parent_type": "부",
+        "phone_tail": "8642",
+        "student_grade": "6학년",
+        "student_class": "1반",
+        "student_number": "5",
+        "student_name": "오지훈",
+    },
+    {
+        "school_name": ADDITIONAL_SCHOOL_NAME,
+        "parent_name": "문채원",
+        "parent_type": "보호자",
+        "phone_tail": "9090",
+        "student_grade": "1학년",
+        "student_class": "3반",
+        "student_number": "18",
+        "student_name": "문하린",
     },
 ]
 
@@ -261,6 +292,72 @@ DEMO_COMPLAINTS = [
         "refined_text": "학교 홈페이지 공지 검색과 분류 체계의 사용성을 점검하고, 개선 가능 여부 검토를 요청드립니다.",
         "comment": "행정실에서 홈페이지 게시판 분류 체계를 검토하고 있습니다.",
     },
+    {
+        "parent_index": 3,
+        "category": "수업/학습 문제",
+        "urgency": "보통",
+        "status": "접수",
+        "days_ago": 11,
+        "title": "받아쓰기 평가 안내 방식 개선 요청",
+        "original_text": "받아쓰기 평가 범위가 아이들에게 늦게 전달되어 준비가 어렵다고 합니다. 평가 안내를 조금 더 일찍 해주세요.",
+        "refined_text": "받아쓰기 평가 범위와 일정을 학생이 충분히 준비할 수 있도록 사전에 명확히 안내해 주시기 바랍니다.",
+        "comment": "",
+    },
+    {
+        "parent_index": 4,
+        "category": "교사 태도/행동",
+        "urgency": "보통",
+        "status": "검토 중",
+        "days_ago": 19,
+        "title": "질문 응대 과정 확인 요청",
+        "original_text": "아이가 수업 중 질문했을 때 무안한 말을 들었다고 해서 속상해합니다. 사실관계를 확인해 주세요.",
+        "refined_text": "수업 중 학생 질문에 대한 응대 과정에서 학생이 위축감을 느낀 상황이 있었는지 확인을 요청드립니다.",
+        "comment": "담임교사와 교과 담당 교사가 면담 일정을 조율하고 있습니다.",
+    },
+    {
+        "parent_index": 5,
+        "category": "시설/환경",
+        "urgency": "높음",
+        "status": "검토 중",
+        "days_ago": 25,
+        "title": "놀이터 미끄럼틀 안전 점검 요청",
+        "original_text": "저학년 놀이터 미끄럼틀 손잡이가 흔들려 아이들이 다칠까 봐 걱정됩니다. 바로 점검해 주세요.",
+        "refined_text": "저학년 놀이터 미끄럼틀 손잡이 고정 상태를 확인하고, 안전사고 예방을 위한 시설 점검을 요청드립니다.",
+        "comment": "시설 담당자가 현장 확인을 진행 중이며, 임시 사용 제한 안내를 부착했습니다.",
+    },
+    {
+        "parent_index": 3,
+        "category": "급식",
+        "urgency": "보통",
+        "status": "처리 완료",
+        "days_ago": 38,
+        "title": "우유 보관 온도 확인 요청",
+        "original_text": "급식 우유가 미지근하게 나온다고 해서 보관 상태가 걱정됩니다. 냉장 보관이 잘 되는지 확인 부탁드립니다.",
+        "refined_text": "급식 우유의 냉장 보관 및 배식 온도 관리 상태를 확인하고, 필요한 개선 조치를 요청드립니다.",
+        "comment": "급식실 냉장고 온도 점검표를 재확인했고 배식 전 보관 기준을 다시 안내했습니다.",
+    },
+    {
+        "parent_index": 4,
+        "category": "생활지도/안전",
+        "urgency": "높음",
+        "status": "접수",
+        "days_ago": 6,
+        "title": "후문 앞 횡단보도 안전지도 요청",
+        "original_text": "후문 앞 횡단보도에서 차량이 빠르게 지나가 아이들이 위험해 보입니다. 등하교 시간 안전지도가 필요합니다.",
+        "refined_text": "후문 앞 횡단보도 주변 차량 속도와 학생 보행 안전 상황을 확인하고, 등하교 시간 안전지도 강화를 요청드립니다.",
+        "comment": "",
+    },
+    {
+        "parent_index": 5,
+        "category": "기타",
+        "urgency": "낮음",
+        "status": "보류",
+        "days_ago": 52,
+        "title": "방과후 신청 알림 개선 건의",
+        "original_text": "방과후 신청 마감 알림이 너무 늦게 와서 놓칠 뻔했습니다. 알림 시간을 조금 앞당겨 주세요.",
+        "refined_text": "방과후 프로그램 신청 마감 알림이 충분한 여유를 두고 전달될 수 있도록 안내 시점 개선을 요청드립니다.",
+        "comment": "다음 신청 기간부터 알림 발송 시점을 하루 앞당기는 방안을 검토하고 있습니다.",
+    },
 ]
 
 
@@ -268,12 +365,16 @@ def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
+def parent_school_name(parent: dict) -> str:
+    return parent.get("school_name") or SCHOOL_NAME
+
+
 def build_parent_login_id(parent: dict) -> str:
     raw = "|".join(
         [
             parent["parent_name"],
             parent["phone_tail"],
-            SCHOOL_NAME,
+            parent_school_name(parent),
             parent["student_grade"],
             parent["student_class"],
             parent["student_number"],
@@ -334,7 +435,7 @@ def insert_parents(cursor) -> list[int]:
                 parent["parent_name"],
                 parent["parent_type"],
                 f"***-****-{parent['phone_tail']}",
-                SCHOOL_NAME,
+                parent_school_name(parent),
                 parent["student_grade"],
                 parent["student_class"],
                 parent["student_number"],
@@ -364,6 +465,7 @@ def insert_complaints(cursor, user_ids: list[int], admin_id: int) -> None:
     base_date = datetime.now().replace(hour=9, minute=20, second=0, microsecond=0)
     for index, item in enumerate(DEMO_COMPLAINTS, start=1):
         parent = PARENTS[item["parent_index"]]
+        school_name = parent_school_name(parent)
         category = item["category"]
         urgency = item["urgency"]
         department = DEPARTMENT_BY_CATEGORY[category]
@@ -405,7 +507,7 @@ def insert_complaints(cursor, user_ids: list[int], admin_id: int) -> None:
             """,
             (
                 user_ids[item["parent_index"]],
-                SCHOOL_NAME,
+                school_name,
                 parent["student_grade"],
                 parent["student_class"],
                 parent["student_number"],
@@ -466,6 +568,18 @@ def insert_complaints(cursor, user_ids: list[int], admin_id: int) -> None:
 def print_summary(cursor) -> None:
     cursor.execute("SELECT COUNT(*) AS count FROM complaints")
     print(f"complaints: {cursor.fetchone()['count']}")
+
+    cursor.execute(
+        """
+        SELECT school_name, COUNT(*) AS count
+        FROM complaints
+        GROUP BY school_name
+        ORDER BY school_name
+        """
+    )
+    print("school distribution:")
+    for row in cursor.fetchall():
+        print(f"- {row['school_name']}: {row['count']}")
 
     cursor.execute(
         """

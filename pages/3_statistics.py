@@ -17,7 +17,7 @@ CATEGORIES = list(LABEL_TO_ID.keys())
 URGENCIES = ["높음", "보통", "낮음"]
 STATUSES = ["접수", "검토 중", "처리 완료", "보류"]
 CATEGORY_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#8b5cf6"]
-URGENCY_COLORS = {"높음": "#dc2626", "보통": "#f59e0b", "낮음": "#2563eb"}
+URGENCY_COLORS = {"높음": "#dc2626", "보통": "#facc15", "낮음": "#22c55e"}
 STATUS_COLORS = ["#bfdbfe", "#60a5fa", "#2563eb", "#1e3a8a"]
 
 admin_user = require_admin_login()
@@ -49,15 +49,17 @@ def int_ticks(max_value: int, target_count: int = 5) -> list[int]:
     return ticks
 
 
-def complete_daily_counts(df: pd.DataFrame, group_column: str, order: list[str]) -> pd.DataFrame:
+def complete_monthly_counts(df: pd.DataFrame, group_column: str, order: list[str]) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["접수일", group_column, "건수"])
+        return pd.DataFrame(columns=["접수월", group_column, "건수"])
 
-    date_range = pd.date_range(df["접수일"].min(), df["접수일"].max(), freq="D")
-    base = pd.MultiIndex.from_product([date_range, order], names=["접수일", group_column]).to_frame(index=False)
-    grouped = df.groupby(["접수일", group_column]).size().reset_index(name="건수")
-    grouped["접수일"] = pd.to_datetime(grouped["접수일"])
-    merged = base.merge(grouped, on=["접수일", group_column], how="left").fillna({"건수": 0})
+    month_df = df.copy()
+    month_df["접수월"] = month_df["접수일"].dt.to_period("M").dt.to_timestamp()
+    month_range = pd.date_range(month_df["접수월"].min(), month_df["접수월"].max(), freq="MS")
+    base = pd.MultiIndex.from_product([month_range, order], names=["접수월", group_column]).to_frame(index=False)
+    grouped = month_df.groupby(["접수월", group_column]).size().reset_index(name="건수")
+    grouped["접수월"] = pd.to_datetime(grouped["접수월"])
+    merged = base.merge(grouped, on=["접수월", group_column], how="left").fillna({"건수": 0})
     merged["건수"] = merged["건수"].astype(int)
     return merged
 
@@ -68,32 +70,40 @@ def ordered_counts(df: pd.DataFrame, group_column: str, order: list[str]) -> pd.
     return counts
 
 
-def render_line_chart(
+def render_stacked_trend_chart(
     df: pd.DataFrame,
     group_column: str,
     order: list[str],
     colors: list[str],
-    height: int = 360,
+    height: int = 370,
 ) -> None:
     width = 980
-    margin = {"top": 26, "right": 168, "bottom": 58, "left": 54}
+    margin = {"top": 34, "right": 168, "bottom": 60, "left": 54}
     plot_width = width - margin["left"] - margin["right"]
     plot_height = height - margin["top"] - margin["bottom"]
 
-    dates = sorted(pd.to_datetime(df["접수일"]).drop_duplicates().tolist())
-    if not dates:
-        st.info("표시할 추이 데이터가 없습니다.")
+    months = sorted(pd.to_datetime(df["접수월"]).drop_duplicates().tolist())
+    if not months:
+        st.info("표시할 월별 데이터가 없습니다.")
         return
 
-    max_count = int(df["건수"].max()) if not df.empty else 0
-    y_ticks = int_ticks(max_count)
+    pivot = (
+        df.pivot_table(index="접수월", columns=group_column, values="건수", aggfunc="sum", fill_value=0)
+        .reindex(months, fill_value=0)
+        .reindex(columns=order, fill_value=0)
+    )
+    totals = pivot.sum(axis=1).astype(int)
+    max_total = int(totals.max()) if len(totals) else 0
+    y_ticks = int_ticks(max_total)
     y_max = max(y_ticks)
+    slot_width = plot_width / max(len(months), 1)
+    bar_width = min(96, slot_width * 0.58)
 
-    def x_pos(date_value) -> float:
-        if len(dates) == 1:
+    def x_center(month_value) -> float:
+        if len(months) == 1:
             return margin["left"] + plot_width / 2
-        index = dates.index(pd.to_datetime(date_value))
-        return margin["left"] + (plot_width * index / (len(dates) - 1))
+        index = months.index(pd.to_datetime(month_value))
+        return margin["left"] + slot_width * index + slot_width / 2
 
     def y_pos(value: int) -> float:
         if y_max == 0:
@@ -112,31 +122,42 @@ def render_line_chart(
             f'font-size="12" fill="#475569">{tick}</text>'
         )
 
-    max_labels = 8
-    label_step = max(1, ceil(len(dates) / max_labels))
     x_labels = []
-    for index, date_value in enumerate(dates):
-        if index % label_step != 0 and index != len(dates) - 1:
-            continue
-        x = x_pos(date_value)
+    for month_value in months:
+        x = x_center(month_value)
         x_labels.append(
             f'<text x="{x:.1f}" y="{height - 25}" text-anchor="middle" '
-            f'font-size="12" fill="#475569">{date_value.strftime("%m/%d")}</text>'
+            f'font-size="12" fill="#475569">{month_value.strftime("%Y-%m")}</text>'
         )
 
-    line_parts = []
-    for label, color in zip(order, colors):
-        rows = df[df[group_column] == label].sort_values("접수일")
-        if rows.empty:
-            continue
-        points = [(x_pos(row["접수일"]), y_pos(int(row["건수"])), int(row["건수"]), row["접수일"]) for _, row in rows.iterrows()]
-        path_data = " ".join(f"{'M' if idx == 0 else 'L'} {x:.1f} {y:.1f}" for idx, (x, y, _, _) in enumerate(points))
-        line_parts.append(f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="3" />')
-        for x, y, value, date_value in points:
-            line_parts.append(
-                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="{color}" stroke="#ffffff" stroke-width="1.5">'
-                f'<title>{date_value.strftime("%Y-%m-%d")} / {escape(label)} / {value}건</title>'
-                f"</circle>"
+    bar_parts = []
+    for month_value in months:
+        center = x_center(month_value)
+        x = center - bar_width / 2
+        bottom_value = 0
+        for label, color in zip(order, colors):
+            value = int(pivot.loc[month_value, label])
+            if value <= 0:
+                continue
+            top_value = bottom_value + value
+            segment_y = y_pos(top_value)
+            segment_height = y_pos(bottom_value) - segment_y
+            bar_parts.append(
+                f'<rect x="{x:.1f}" y="{segment_y:.1f}" width="{bar_width:.1f}" height="{segment_height:.1f}" '
+                f'fill="{color}"><title>{month_value.strftime("%Y-%m")} / {escape(label)} / {value}건</title></rect>'
+            )
+            if segment_height >= 18:
+                bar_parts.append(
+                    f'<text x="{center:.1f}" y="{segment_y + segment_height / 2 + 4:.1f}" '
+                    f'text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">{value}</text>'
+                )
+            bottom_value = top_value
+
+        total = int(totals.loc[month_value])
+        if total > 0:
+            bar_parts.append(
+                f'<text x="{center:.1f}" y="{max(y_pos(total) - 9, 16):.1f}" text-anchor="middle" '
+                f'font-size="13" font-weight="700" fill="#111827">{total}건</text>'
             )
 
     legend_parts = []
@@ -155,7 +176,7 @@ def render_line_chart(
         <line x1="{margin["left"]}" y1="{margin["top"]}" x2="{margin["left"]}" y2="{margin["top"] + plot_height}" stroke="#cbd5e1" />
         <line x1="{margin["left"]}" y1="{margin["top"] + plot_height}" x2="{margin["left"] + plot_width}" y2="{margin["top"] + plot_height}" stroke="#cbd5e1" />
         {''.join(grid_parts)}
-        {''.join(line_parts)}
+        {''.join(bar_parts)}
         {''.join(x_labels)}
         {''.join(legend_parts)}
       </svg>
@@ -165,8 +186,8 @@ def render_line_chart(
 
 
 def render_bar_chart(df: pd.DataFrame, label_column: str, colors: list[str], height: int = 340) -> None:
-    width = 820
-    margin = {"top": 30, "right": 22, "bottom": 70, "left": 52}
+    width = 720
+    margin = {"top": 36, "right": 20, "bottom": 88, "left": 58}
     plot_width = width - margin["left"] - margin["right"]
     plot_height = height - margin["top"] - margin["bottom"]
 
@@ -176,7 +197,7 @@ def render_bar_chart(df: pd.DataFrame, label_column: str, colors: list[str], hei
     y_ticks = int_ticks(max_count)
     y_max = max(y_ticks)
     bar_slot = plot_width / max(len(labels), 1)
-    bar_width = min(62, bar_slot * 0.58)
+    bar_width = min(58, bar_slot * 0.58)
 
     def y_pos(value: int) -> float:
         if y_max == 0:
@@ -192,7 +213,7 @@ def render_bar_chart(df: pd.DataFrame, label_column: str, colors: list[str], hei
         )
         grid_parts.append(
             f'<text x="{margin["left"] - 10}" y="{y + 4:.1f}" text-anchor="end" '
-            f'font-size="12" fill="#475569">{tick}</text>'
+            f'font-size="14" fill="#475569">{tick}</text>'
         )
 
     bar_parts = []
@@ -207,12 +228,12 @@ def render_bar_chart(df: pd.DataFrame, label_column: str, colors: list[str], hei
             f'rx="5" fill="{color}"><title>{escape(label)} / {value}건</title></rect>'
         )
         bar_parts.append(
-            f'<text x="{center:.1f}" y="{max(y - 8, 14):.1f}" text-anchor="middle" '
-            f'font-size="13" font-weight="700" fill="#111827">{value}</text>'
+            f'<text x="{center:.1f}" y="{max(y - 10, 17):.1f}" text-anchor="middle" '
+            f'font-size="16" font-weight="800" fill="#111827">{value}</text>'
         )
         bar_parts.append(
-            f'<text x="{center:.1f}" y="{height - 32}" text-anchor="middle" '
-            f'font-size="12.5" fill="#334155">{escape(label)}</text>'
+            f'<text x="{center:.1f}" y="{height - 42}" text-anchor="middle" '
+            f'font-size="15" font-weight="700" fill="#334155">{escape(label)}</text>'
         )
 
     svg = f"""
@@ -258,13 +279,13 @@ metric_cols[3].metric("카테고리 수", int(df["카테고리"].nunique()))
 
 st.divider()
 
-st.subheader("접수일 기준 카테고리별 추이")
-daily_category = complete_daily_counts(df, "카테고리", CATEGORIES)
-render_line_chart(daily_category, "카테고리", CATEGORIES, CATEGORY_COLORS)
+st.subheader("접수월 기준 카테고리별 분포 추이")
+monthly_category = complete_monthly_counts(df, "카테고리", CATEGORIES)
+render_stacked_trend_chart(monthly_category, "카테고리", CATEGORIES, CATEGORY_COLORS)
 
-st.subheader("접수일 기준 긴급도 추이")
-daily_urgency = complete_daily_counts(df, "긴급도", URGENCIES)
-render_line_chart(daily_urgency, "긴급도", URGENCIES, [URGENCY_COLORS[item] for item in URGENCIES])
+st.subheader("접수월 기준 긴급도 분포 추이")
+monthly_urgency = complete_monthly_counts(df, "긴급도", URGENCIES)
+render_stacked_trend_chart(monthly_urgency, "긴급도", URGENCIES, [URGENCY_COLORS[item] for item in URGENCIES])
 
 col1, col2 = st.columns(2)
 
