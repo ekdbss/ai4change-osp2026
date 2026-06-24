@@ -1,3 +1,5 @@
+from html import escape
+
 import pandas as pd
 import streamlit as st
 
@@ -31,6 +33,48 @@ def priority_label(value: int) -> str:
         5: "5단계 - 참고",
     }
     return labels.get(int(value), "3단계 - 일반")
+
+
+def priority_short_label(value: int) -> str:
+    labels = {
+        1: "1 긴급",
+        2: "2 우선",
+        3: "3 일반",
+        4: "4 낮음",
+        5: "5 참고",
+    }
+    return labels.get(int(value), "3 일반")
+
+
+def table_height(row_count: int, max_height: int = 460) -> int:
+    return min(max_height, 42 + max(row_count, 1) * 36)
+
+
+def render_decision_summary(
+    ai_category: str,
+    ai_urgency: str,
+    final_category: str,
+    final_urgency: str,
+) -> None:
+    st.markdown(
+        f"""
+        <div class="decision-summary">
+            <div class="decision-row">
+                <div class="decision-label">AI 추천 카테고리</div>
+                <div class="decision-value">{escape(ai_category)}</div>
+                <div class="decision-label">AI 추천 긴급도</div>
+                <div class="decision-value">{escape(ai_urgency)}</div>
+            </div>
+            <div class="decision-row">
+                <div class="decision-label">확정 카테고리</div>
+                <div class="decision-value">{escape(final_category)}</div>
+                <div class="decision-label">확정 긴급도</div>
+                <div class="decision-value">{escape(final_urgency)}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def load_complaints() -> list[dict]:
@@ -111,6 +155,53 @@ st.caption(
     f"{admin_user.get('region_name', '')} / {admin_user.get('school_name', '')} "
     "민원만 표시됩니다."
 )
+st.markdown(
+    """
+    <style>
+    .decision-summary {
+        border: 1px solid #dbe4f0;
+        border-radius: 8px;
+        overflow: hidden;
+        margin: 0.6rem 0 1rem;
+        background: #ffffff;
+    }
+    .decision-row {
+        display: grid;
+        grid-template-columns: 120px minmax(0, 1fr) 120px minmax(0, 1fr);
+        gap: 0;
+        border-bottom: 1px solid #e5edf6;
+    }
+    .decision-row:last-child {
+        border-bottom: 0;
+    }
+    .decision-label {
+        padding: 0.52rem 0.65rem;
+        background: #eff6ff;
+        color: #1e40af;
+        font-size: 0.78rem;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+    .decision-value {
+        padding: 0.52rem 0.65rem;
+        color: #0f172a;
+        font-size: 0.88rem;
+        line-height: 1.35;
+        word-break: keep-all;
+        overflow-wrap: anywhere;
+    }
+    div[data-testid="stDataFrame"] {
+        font-size: 0.82rem;
+    }
+    @media (max-width: 900px) {
+        .decision-row {
+            grid-template-columns: 112px minmax(0, 1fr);
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 artifact_status = ensure_model_artifacts(get_model_path())
 with st.expander("KoBERT 학습 모델 상태", expanded=False):
@@ -186,7 +277,7 @@ def matches(item: dict) -> bool:
     return True
 
 
-filtered = [item for item in complaints if matches(item)]
+filtered = sorted([item for item in complaints if matches(item)], key=lambda item: int(item.get("id") or 0))
 
 st.subheader("민원 목록")
 if not filtered:
@@ -206,12 +297,32 @@ table_rows = [
         "확정 카테고리": item.get("final_category") or item.get("ai_category", ""),
         "AI 긴급도": item.get("ai_urgency", "보통"),
         "확정 긴급도": item.get("final_urgency") or item.get("ai_urgency", "보통"),
-        "우선순위": priority_label(int(item.get("priority_level") or 3)),
+        "우선순위": priority_short_label(int(item.get("priority_level") or 3)),
         "상태": item.get("status", ""),
     }
     for item in filtered
 ]
-st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+st.dataframe(
+    pd.DataFrame(table_rows),
+    use_container_width=True,
+    hide_index=True,
+    height=table_height(len(table_rows)),
+    column_config={
+        "접수번호": st.column_config.NumberColumn("번호", width="small", format="%d"),
+        "접수 시간": st.column_config.TextColumn("접수시간", width="small"),
+        "학년": st.column_config.TextColumn("학년", width="small"),
+        "반": st.column_config.TextColumn("반", width="small"),
+        "출석번호": st.column_config.TextColumn("출석", width="small"),
+        "이름": st.column_config.TextColumn("이름", width="small"),
+        "제목": st.column_config.TextColumn("제목", width="medium"),
+        "AI 카테고리": st.column_config.TextColumn("AI분류", width="small"),
+        "확정 카테고리": st.column_config.TextColumn("확정분류", width="small"),
+        "AI 긴급도": st.column_config.TextColumn("AI긴급", width="small"),
+        "확정 긴급도": st.column_config.TextColumn("확정긴급", width="small"),
+        "우선순위": st.column_config.TextColumn("우선", width="small"),
+        "상태": st.column_config.TextColumn("상태", width="small"),
+    },
+)
 
 selected_id = st.selectbox(
     "상세 확인할 민원",
@@ -222,12 +333,12 @@ selected_id = st.selectbox(
 selected = next((item for item in complaints if item.get("id") == selected_id), None)
 if selected:
     st.divider()
+    current_final_category = selected.get("final_category") or selected.get("ai_category") or "기타"
+    current_final_urgency = selected.get("final_urgency") or selected.get("ai_urgency") or "보통"
+    current_priority = int(selected.get("priority_level") or 3)
+
     detail_left, detail_right = st.columns([1, 1], gap="large")
     with detail_left:
-        current_final_category = selected.get("final_category") or selected.get("ai_category") or "기타"
-        current_final_urgency = selected.get("final_urgency") or selected.get("ai_urgency") or "보통"
-        current_priority = int(selected.get("priority_level") or 3)
-
         st.subheader(selected["title"])
         st.caption(
             f"접수번호 #{selected['id']} | "
@@ -236,11 +347,12 @@ if selected:
             f"{selected.get('student_number', '')}번 {selected.get('student_name', '')}"
         )
 
-        info_cols = st.columns(4)
-        info_cols[0].metric("AI 추천 카테고리", selected.get("ai_category", ""))
-        info_cols[1].metric("AI 추천 긴급도", selected.get("ai_urgency", "보통"))
-        info_cols[2].metric("확정 카테고리", current_final_category)
-        info_cols[3].metric("확정 긴급도", current_final_urgency)
+        render_decision_summary(
+            selected.get("ai_category", ""),
+            selected.get("ai_urgency", "보통"),
+            current_final_category,
+            current_final_urgency,
+        )
 
         st.markdown("**AI 정제본**")
         st.success(selected.get("refined_text", ""))
@@ -269,7 +381,6 @@ if selected:
             st.write(selected.get("original_text", ""))
 
     with detail_right:
-        st.divider()
         st.markdown("**처리 정보 수정**")
 
         edit_row1_col1, edit_row1_col2 = st.columns(2)
@@ -324,19 +435,32 @@ if selected:
             except Exception as exc:
                 st.error(f"저장에 실패했습니다. 사유: {exc}")
 
-        history = load_status_history(int(selected["id"]))
-        if history:
-            st.divider()
-            st.markdown("**처리 이력**")
-            history_rows = [
-                {
-                    "변경일": str(item.get("changed_at", "")),
-                    "상태": f"{item.get('prev_status') or '-'} -> {item.get('new_status') or '-'}",
-                    "카테고리": f"{item.get('prev_final_category') or '-'} -> {item.get('new_final_category') or '-'}",
-                    "긴급도": f"{item.get('prev_final_urgency') or '-'} -> {item.get('new_final_urgency') or '-'}",
-                    "우선순위": f"{item.get('prev_priority_level') or '-'} -> {item.get('new_priority_level') or '-'}",
-                    "메모": item.get("memo") or "",
-                }
-                for item in history
-            ]
-            st.dataframe(pd.DataFrame(history_rows), use_container_width=True, hide_index=True)
+    history = load_status_history(int(selected["id"]))
+    if history:
+        st.divider()
+        st.subheader("처리 이력")
+        history_rows = [
+            {
+                "변경일": str(item.get("changed_at", ""))[:19],
+                "상태": f"{item.get('prev_status') or '-'} -> {item.get('new_status') or '-'}",
+                "카테고리": f"{item.get('prev_final_category') or '-'} -> {item.get('new_final_category') or '-'}",
+                "긴급도": f"{item.get('prev_final_urgency') or '-'} -> {item.get('new_final_urgency') or '-'}",
+                "우선순위": f"{item.get('prev_priority_level') or '-'} -> {item.get('new_priority_level') or '-'}",
+                "메모": item.get("memo") or "",
+            }
+            for item in history
+        ]
+        st.dataframe(
+            pd.DataFrame(history_rows),
+            use_container_width=True,
+            hide_index=True,
+            height=table_height(len(history_rows), max_height=340),
+            column_config={
+                "변경일": st.column_config.TextColumn("변경일", width="small"),
+                "상태": st.column_config.TextColumn("상태", width="small"),
+                "카테고리": st.column_config.TextColumn("카테고리", width="medium"),
+                "긴급도": st.column_config.TextColumn("긴급도", width="small"),
+                "우선순위": st.column_config.TextColumn("우선순위", width="small"),
+                "메모": st.column_config.TextColumn("메모", width="large"),
+            },
+        )

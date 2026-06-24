@@ -24,10 +24,6 @@ navigation = st.navigation(
                 "pages/3_statistics.py",
                 title="민원 통계",
             ),
-            st.Page(
-                "pages/4_model_report.py",
-                title="AI 모델 리포트",
-            ),
         ],
     }
 )

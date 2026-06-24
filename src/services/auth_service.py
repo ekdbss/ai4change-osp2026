@@ -31,6 +31,14 @@ EDUCATION_OFFICES = [
 ]
 
 
+def format_grade_label(value: int) -> str:
+    return f"{int(value)}학년"
+
+
+def format_class_label(value: int) -> str:
+    return f"{int(value)}반"
+
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
@@ -123,13 +131,16 @@ def require_parent_login() -> dict:
         school_name = st.text_input("학교", placeholder="예: 새봄초등학교")
         col1, col2, col3 = st.columns(3)
         with col1:
-            student_grade = st.text_input("학년", placeholder="예: 3학년")
+            student_grade_number = st.number_input("학년", min_value=1, max_value=6, value=3, step=1)
         with col2:
-            student_class = st.text_input("반", placeholder="예: 2반")
+            student_class_number = st.number_input("반", min_value=1, max_value=30, value=2, step=1)
         with col3:
             student_number = st.text_input("출석번호", placeholder="예: 15")
         student_name = st.text_input("학생 이름", placeholder="예: 김민준")
         submitted = st.form_submit_button("학부모로 시작하기", type="primary", use_container_width=True)
+
+    student_grade = format_grade_label(student_grade_number)
+    student_class = format_class_label(student_class_number)
 
     if submitted:
         errors = _validate_parent_login(
@@ -199,7 +210,7 @@ def require_admin_login() -> dict:
         else:
             st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
 
-    st.info("데모 기본 계정은 admin / admin1234 입니다. 발표 전에는 .env에서 변경하세요.")
+    st.info("데모 기본 계정은 admin / admin1234입니다.")
     st.stop()
 
 

@@ -11,7 +11,7 @@ from src.config import get_model_path
 from src.db.connection import is_db_configured
 from src.db.complaint_repository import create_complaint
 from src.db.complaint_repository import list_complaints_for_parent as list_db_parent_complaints
-from src.services.auth_service import require_parent_login
+from src.services.auth_service import format_class_label, format_grade_label, require_parent_login
 from src.services import session_store
 from src.services.complaint_service import process_complaint
 from src.utils.validators import validate_complaint, validate_student_info
@@ -22,12 +22,12 @@ if "complaint_text_input" not in st.session_state:
     st.session_state["complaint_text_input"] = ""
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner="KoBERT 모델을 준비하고 있습니다. 로딩까지 시간이 걸릴 수 있습니다.")
 def load_classifier() -> KoBERTPredictor:
     return KoBERTPredictor(get_model_path())
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def load_gemini() -> GeminiService:
     return GeminiService()
 
@@ -53,6 +53,11 @@ def format_file_size(size: int | None) -> str:
     if size >= 1024:
         return f"{size / 1024:.1f} KB"
     return f"{size} bytes"
+
+
+def extract_number(value: str | int | None, default: int = 1) -> int:
+    digits = "".join(char for char in str(value or "") if char.isdigit())
+    return int(digits) if digits else default
 
 
 def render_attachment_preview(item: dict, key_prefix: str) -> None:
@@ -108,18 +113,18 @@ def render_tts_control(text: str, component_id: str, label: str = "내용 읽어
     safe_component_id = component_id.replace("-", "_")
     components.html(
         f"""
-        <div style="display:flex;gap:8px;align-items:center;margin:4px 0 12px 0;">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0 16px 0;">
           <button
             id="{safe_component_id}_speak"
-            style="border:1px solid #d1d5db;border-radius:6px;background:#ffffff;padding:7px 12px;cursor:pointer;font-size:14px;"
+            style="border:1px solid #2563eb;border-radius:8px;background:#2563eb;color:#ffffff;padding:14px 20px;cursor:pointer;font-size:18px;font-weight:700;min-height:52px;"
           >
-            {label}
+            🔊 {label}
           </button>
           <button
             id="{safe_component_id}_stop"
-            style="border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:7px 12px;cursor:pointer;font-size:14px;"
+            style="border:1px solid #d1d5db;border-radius:8px;background:#ffffff;color:#374151;padding:14px 20px;cursor:pointer;font-size:18px;font-weight:700;min-height:52px;"
           >
-            중지
+            ⏹ 중지
           </button>
         </div>
         <script>
@@ -138,7 +143,7 @@ def render_tts_control(text: str, component_id: str, label: str = "내용 읽어
           }};
         </script>
         """,
-        height=54,
+        height=82,
     )
 
 
@@ -146,18 +151,18 @@ def render_browser_stt_pad(component_id: str) -> None:
     safe_component_id = component_id.replace("-", "_")
     components.html(
         f"""
-        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#ffffff;">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-            <button id="{safe_component_id}_start" style="border:1px solid #d1d5db;border-radius:6px;background:#ffffff;padding:7px 12px;cursor:pointer;font-size:14px;">받아쓰기 시작</button>
-            <button id="{safe_component_id}_stop" style="border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:7px 12px;cursor:pointer;font-size:14px;">중지</button>
-            <button id="{safe_component_id}_copy" style="border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#ffffff;padding:7px 12px;cursor:pointer;font-size:14px;">복사</button>
+        <div style="border:1px solid #dbeafe;border-radius:10px;padding:16px;background:#f8fbff;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+            <button id="{safe_component_id}_start" style="border:1px solid #2563eb;border-radius:10px;background:#2563eb;color:#ffffff;padding:18px 24px;cursor:pointer;font-size:22px;font-weight:800;min-height:64px;flex:1 1 220px;">🎙️ 녹음 시작</button>
+            <button id="{safe_component_id}_stop" style="border:1px solid #d1d5db;border-radius:10px;background:#ffffff;color:#374151;padding:18px 24px;cursor:pointer;font-size:20px;font-weight:800;min-height:64px;flex:1 1 140px;">⏹ 중지</button>
+            <button id="{safe_component_id}_copy" style="border:1px solid #0f766e;border-radius:10px;background:#0f766e;color:#ffffff;padding:18px 24px;cursor:pointer;font-size:20px;font-weight:800;min-height:64px;flex:1 1 160px;">복사</button>
           </div>
           <textarea
             id="{safe_component_id}_text"
             placeholder="말한 내용이 여기에 표시됩니다."
-            style="box-sizing:border-box;width:100%;min-height:96px;border:1px solid #d1d5db;border-radius:6px;padding:10px;font-size:14px;line-height:1.5;resize:vertical;"
+            style="box-sizing:border-box;width:100%;min-height:120px;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:17px;line-height:1.55;resize:vertical;background:#ffffff;"
           ></textarea>
-          <div id="{safe_component_id}_status" style="margin-top:6px;color:#4b5563;font-size:13px;"></div>
+          <div id="{safe_component_id}_status" style="margin-top:8px;color:#1f2937;font-size:15px;font-weight:600;"></div>
         </div>
         <script>
           const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -227,7 +232,28 @@ def render_browser_stt_pad(component_id: str) -> None:
           }};
         </script>
         """,
-        height=220,
+        height=270,
+    )
+
+
+def render_kobert_notice(model_parts: list[str]) -> None:
+    joined_parts = "/".join(model_parts)
+    st.markdown(
+        f"""
+        <div style="
+            background:#dbeafe;
+            color:#1e40af;
+            border:1px solid #93c5fd;
+            border-radius:8px;
+            padding:10px 12px;
+            font-size:0.92rem;
+            line-height:1.45;
+            font-weight:600;
+            margin:8px 0 12px 0;">
+            직접 Fine-Tuning한 KoBERT 모델이 {joined_parts} 판단에 사용되었습니다.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
@@ -290,35 +316,7 @@ with submit_tab:
     st.subheader("학생 정보")
 
     with st.expander("음성으로 민원 작성하기", expanded=False):
-        st.caption("녹음 후 텍스트 변환을 누르면 민원 내용 칸에 반영됩니다.")
-        audio_file = st.audio_input("민원 내용을 말로 녹음해 주세요.", key="complaint_audio_input")
-        if st.button(
-            "녹음 내용 텍스트로 변환",
-            disabled=audio_file is None,
-            use_container_width=True,
-        ):
-            gemini_service = load_gemini()
-            if not gemini_service.model_available:
-                st.warning("Gemini 연결값이 없어 녹음 파일을 텍스트로 변환할 수 없습니다.")
-            else:
-                with st.spinner("녹음 내용을 텍스트로 변환하고 있습니다."):
-                    transcript, used_model = gemini_service.transcribe_audio(
-                        audio_file.getvalue(),
-                        getattr(audio_file, "type", None) or "audio/wav",
-                    )
-
-                if transcript and used_model:
-                    current_text = st.session_state.get("complaint_text_input", "").strip()
-                    if current_text:
-                        st.session_state["complaint_text_input"] = f"{current_text}\n{transcript}".strip()
-                    else:
-                        st.session_state["complaint_text_input"] = transcript
-                    st.success("녹음 내용을 민원 내용 칸에 넣었습니다.")
-                    st.rerun()
-                else:
-                    st.warning("음성 변환에 실패했습니다. 잠시 후 다시 시도하거나 아래 받아쓰기를 이용해 주세요.")
-
-        st.caption("브라우저 받아쓰기는 API 없이 동작합니다. 인식된 문장을 복사해 민원 내용 칸에 붙여넣을 수 있습니다.")
+        st.caption("큰 녹음 버튼을 누르고 말한 뒤, 인식된 문장을 복사해 민원 내용 칸에 붙여넣어 주세요.")
         render_browser_stt_pad("parent-complaint-stt")
 
     with st.form("parent_complaint_form"):
@@ -326,9 +324,23 @@ with submit_tab:
         with info_col1:
             school_name = st.text_input("학교", value=parent_user.get("school_name", ""))
         with info_col2:
-            student_grade = st.text_input("학년", value=parent_user.get("student_grade", ""))
+            student_grade_number = st.number_input(
+                "학년",
+                min_value=1,
+                max_value=6,
+                value=max(1, min(6, extract_number(parent_user.get("student_grade"), 3))),
+                step=1,
+            )
         with info_col3:
-            student_class = st.text_input("반", value=parent_user.get("student_class", ""))
+            student_class_number = st.number_input(
+                "반",
+                min_value=1,
+                max_value=30,
+                value=max(1, min(30, extract_number(parent_user.get("student_class"), 2))),
+                step=1,
+            )
+        student_grade = format_grade_label(student_grade_number)
+        student_class = format_class_label(student_class_number)
 
         info_col4, info_col5 = st.columns([0.8, 1.2])
         with info_col4:
@@ -430,7 +442,7 @@ with submit_tab:
                 model_parts.append("카테고리")
             if pending.get("urgency_model_available"):
                 model_parts.append("긴급도")
-            st.success(f"직접 Fine-Tuning한 KoBERT 모델이 {'/'.join(model_parts)} 판단에 사용되었습니다.")
+            render_kobert_notice(model_parts)
         else:
             st.info("현재 Fine-Tuning된 KoBERT 모델이 없어 데모 분류/긴급도 판단기가 사용되었습니다.")
         for error in pending.get("load_errors", []):
