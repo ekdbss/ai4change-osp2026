@@ -210,7 +210,7 @@ def require_admin_login() -> dict:
         else:
             st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
 
-    st.info("데모 기본 계정은 admin / admin1234 입니다. 발표 전에는 .env에서 변경하세요.")
+    st.info("데모 기본 계정은 admin / admin1234입니다.")
     st.stop()
 
 

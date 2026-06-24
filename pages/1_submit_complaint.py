@@ -22,7 +22,7 @@ if "complaint_text_input" not in st.session_state:
     st.session_state["complaint_text_input"] = ""
 
 
-@st.cache_resource(show_spinner="KoBERT 모델을 준비하고 있습니다. 처음 1회는 시간이 걸릴 수 있습니다.")
+@st.cache_resource(show_spinner="KoBERT 모델을 준비하고 있습니다. 로딩까지 시간이 걸릴 수 있습니다.")
 def load_classifier() -> KoBERTPredictor:
     return KoBERTPredictor(get_model_path())
 
