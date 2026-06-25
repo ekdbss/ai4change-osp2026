@@ -6,6 +6,26 @@ AI 기반 학부모 민원 관리 플랫폼 | Open-Source Project 2026
 
 ---
 
+## Quick Start
+
+아래 순서대로 실행하면 동일한 개발 환경에서 서비스를 재현할 수 있습니다.
+
+```bash
+conda create --name scc python=3.11.7
+conda activate scc
+pip install -r requirements.txt
+cp .env.example .env
+python scripts/init_database.py
+streamlit run app.py
+```
+
+- 학습 데이터 경로: `data/raw/generated_complaints_final_1800.csv`
+- KoBERT 학습 명령: `python model/train_kobert.py --epochs 6 --batch-size 16 --max-length 128`
+- 모델 평가 명령: `python model/evaluate.py`
+- 배포 설정 예시는 `.streamlit/secrets.example.toml`과 `docs/streamlit-cloud-deployment.md`를 참고합니다.
+
+---
+
 ## 프로젝트 개요
 
 **SCC**는 학부모 민원을 디지털로 접수하고, 팀이 직접 Fine-Tuning한 KoBERT 모델로 민원 카테고리와 처리 긴급도를 자동 판단하는 Streamlit 기반 웹 플랫폼입니다.
@@ -67,7 +87,7 @@ MySQL 저장 (complaint_repository.py)
 | Frontend | Streamlit |
 | Backend | Python 3.11.7 |
 | Database | MySQL, Aiven for MySQL |
-| AI Model | KoBERT (`klue/bert-base`), PyTorch, HuggingFace Transformers |
+| AI Model | KoBERT (`skt/kobert-base-v1`), PyTorch, HuggingFace Transformers |
 | Generative AI | Gemini 2.5 Flash |
 | Deployment | Streamlit Cloud |
 
@@ -87,6 +107,7 @@ MySQL 저장 (complaint_repository.py)
 .
 ├── LICENSE
 ├── README.md
+├── .env.example                    # 로컬 실행용 환경변수 예시
 ├── app.py                          # Streamlit 엔트리포인트
 ├── classifier.py                   # 분류 파이프라인 통합
 ├── db.py                           # DB 연결 설정 (SQLAlchemy)
@@ -114,19 +135,15 @@ MySQL 저장 (complaint_repository.py)
 │   ├── train_kobert.py             # KoBERT 파인튜닝 학습 스크립트
 │   ├── dataset.py                  # 커스텀 Dataset 클래스
 │   ├── evaluate.py                 # 모델 평가 스크립트
-│   └── saved_model/                # 파인튜닝된 모델 저장 경로
-│       ├── config.json
-│       ├── label_map.json
-│       ├── model.safetensors
-│       ├── tokenizer.json
-│       ├── tokenizer_config.json
-│       └── training_args.bin
+│   └── saved_model/                # 실행 시 설치/생성되는 파인튜닝 모델 경로
+│       ├── category/               # 카테고리 분류 모델
+│       └── urgency/                # 긴급도 분류 모델
 │
 ├── pages/                          # Streamlit 멀티페이지
 │   ├── 1_submit_complaint.py       # 민원 접수 페이지 (학부모)
 │   ├── 2_admin_dashboard.py        # 관리자 대시보드
 │   ├── 3_statistics.py             # 통계 시각화
-│   └── 4_model_report.py           # 분류 모델 성능 리포트
+│   └── 4_model_report.py           # 학습 결과 확인용 보조 페이지
 │
 ├── prompts/                        # Gemini 프롬프트 템플릿
 │   ├── data_generation_prompt.md
@@ -210,7 +227,7 @@ pip install -r requirements.txt
 
 | 분류 | 패키지 | 버전 |
 |------|--------|------|
-| Frontend | `streamlit` | `>=1.35.0` |
+| Frontend | `streamlit` | `>=1.58.0` |
 | Data & ML | `pandas` | `>=2.0.0` |
 | | `numpy` | `>=1.24.0` |
 | | `scikit-learn` | `>=1.4.0` |
@@ -230,21 +247,23 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-```toml
-GEMINI_API_KEY = "your-gemini-api-key"
+```env
+GEMINI_API_KEY=your-gemini-api-key
 
-KOBERT_MODEL_ZIP_URL = "https://github.com/ekdbss/scc-osp2026/releases/download/v0-kobert-1800/kobert_v1_1800.zip"
-KOBERT_MODEL_ZIP_SHA256 = "a8434b4b3e625282ec40dedf73dbad046170bcac7011f7ccedc798a3f15e1630"
+DB_HOST=your-db-host
+DB_PORT=3306
+DB_USER=your-db-user
+DB_PASSWORD=your-db-password
+DB_NAME=scc_osp2026
+DB_SSL_MODE=REQUIRED
 
-DB_HOST = "your-db-host"
-DB_PORT = "3306"
-DB_USER = "your-db-user"
-DB_PASSWORD = "your-db-password"
-DB_NAME = "defaultdb"
-DB_SSL_MODE = "REQUIRED"
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-admin-password
 
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "your-admin-password"
+BASE_MODEL_NAME=skt/kobert-base-v1
+KOBERT_MODEL_PATH=model/saved_model
+KOBERT_MODEL_ZIP_URL=https://github.com/ekdbss/scc-osp2026/releases/download/v0-kobert-1800/kobert_v1_1800.zip
+KOBERT_MODEL_ZIP_SHA256=a8434b4b3e625282ec40dedf73dbad046170bcac7011f7ccedc798a3f15e1630
 ```
 
 > Streamlit Cloud에서는 `.env` 대신 **App settings > Secrets**에 위 값을 입력합니다. 자세한 절차는 `docs/streamlit-cloud-deployment.md`를 참고하세요.
@@ -263,12 +282,18 @@ python scripts/init_database.py
 
 ```
 model/saved_model/
-├── config.json
-├── label_map.json
-├── model.safetensors
-├── tokenizer.json
-├── tokenizer_config.json
-└── training_args.bin
+├── category/
+│   ├── config.json
+│   ├── label_map.json
+│   ├── model.safetensors
+│   ├── tokenizer.json
+│   └── tokenizer_config.json
+└── urgency/
+    ├── config.json
+    ├── label_map.json
+    ├── model.safetensors
+    ├── tokenizer.json
+    └── tokenizer_config.json
 ```
 
 > 배포 환경에서는 `KOBERT_MODEL_ZIP_URL`에 설정된 zip 파일을 앱이 자동으로 다운로드하여 `model/saved_model`에 설치합니다.
@@ -282,6 +307,10 @@ streamlit run app.py
 ---
 
 ## 학습 데이터
+
+최종 학습 데이터셋은 `data/raw/generated_complaints_final_1800.csv`입니다. 총 1,800건으로 구성되어 있으며, 6개 민원 카테고리별 300건씩 균형 있게 포함되어 있습니다. 각 데이터는 민원 원문(`text`), 카테고리(`category`), 긴급도(`urgency`), 데이터 출처(`source`) 컬럼을 포함합니다.
+
+긴급도는 `높음`, `보통`, `낮음`의 3단계로 구성했습니다. 실제 학생, 학부모, 교직원의 개인정보는 포함하지 않으며, 학교 민원 처리 시나리오에 맞춰 생성한 합성 데이터와 검수 데이터를 사용했습니다.
 
 합성 데이터는 아래 스크립트로 생성할 수 있습니다.
 
@@ -317,14 +346,17 @@ python model/evaluate.py
 
 ## DB 스키마
 
-총 4개의 핵심 테이블로 구성됩니다. 자세한 DDL은 `sql/schema.sql`을 참고하세요.
+주요 테이블은 다음과 같습니다. 자세한 DDL은 `sql/schema.sql`을 참고하세요.
 
 | 테이블 | 주요 컬럼 | 설명 |
 |--------|-----------|------|
-| `users` | `id`, `parent_type`, `phone_masked` | 학부모 식별 정보 |
-| `admins` | `username`, `role` | 교사/관리자 계정 |
-| `complaints` | `original_text`, `masked_text`, `refined_text`, `structured_json`, `category`, `confidence`, `status`, `recommended_department` | 핵심 민원 데이터 및 AI 추론 결과 |
-| `complaint_status_history` | `prev_status`, `new_status`, `memo` | 민원 처리 상태 변경 이력 |
+| `users` | `login_id`, `parent_name`, `school_name`, `student_grade`, `student_class`, `student_number`, `student_name` | 학부모 계정 및 학생 식별 정보 |
+| `admins` | `username`, `password_hash`, `role`, `region_name`, `school_name` | 교사/관리자 계정 및 소속 학교 정보 |
+| `category_priority_settings` | `category`, `priority_level`, `description` | 카테고리별 기본 처리 우선순위 설정 |
+| `complaints` | `title`, `original_text`, `refined_text`, `ai_category`, `final_category`, `ai_urgency`, `final_urgency`, `status`, `parent_visible_comment` | 핵심 민원 데이터, AI 추론 결과, 관리자 확정 결과 |
+| `complaint_attachments` | `complaint_id`, `file_name`, `mime_type`, `file_data` | 민원 첨부파일 저장 |
+| `complaint_status_history` | `prev_status`, `new_status`, `prev_final_category`, `new_final_category`, `memo`, `changed_at` | 민원 처리 상태 및 관리자 수정 이력 |
+| `statistics` | `stat_date`, `category`, `total_count`, `pending_count`, `completed_count` | 통계 집계 결과 |
 
 ---
 
@@ -333,11 +365,10 @@ python model/evaluate.py
 이 프로젝트는 아래 오픈소스 모델 및 라이브러리를 기반으로 합니다.
 
 ```
-@misc{klue,
-  title        = {KLUE: Korean Language Understanding Evaluation},
-  author       = {Park, Sungjoon and others},
-  year         = {2021},
-  howpublished = {\url{https://github.com/KLUE-benchmark/KLUE}}
+@misc{kobert,
+  title        = {KoBERT},
+  author       = {SK Telecom AI},
+  howpublished = {\url{https://github.com/SKTBrain/KoBERT}}
 }
 ```
 
@@ -350,7 +381,7 @@ python model/evaluate.py
 }
 ```
 
-- **KoBERT 분류 모델**: [`klue/bert-base`](https://huggingface.co/klue/bert-base) — Hugging Face `AutoTokenizer` / `AutoModelForSequenceClassification` 사용
+- **KoBERT 분류 모델**: [`skt/kobert-base-v1`](https://huggingface.co/skt/kobert-base-v1) — Hugging Face `AutoTokenizer` / `AutoModelForSequenceClassification` 사용
 - **보조 AI**: [Google Gemini API](https://ai.google.dev/) — 개인정보 마스킹, 감정 정제, JSON 구조화
 - **프레임워크**: [Streamlit](https://streamlit.io/), [PyTorch](https://pytorch.org/), [Hugging Face Transformers](https://huggingface.co/docs/transformers)
 
@@ -359,3 +390,7 @@ python model/evaluate.py
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+
+Team 숙크크(SCC)가 직접 작성한 소스 코드, 문서, 프롬프트, 예시 데이터셋은 MIT License 조건에 따라 재사용할 수 있습니다.
+
+단, KoBERT base model, PyTorch, Hugging Face Transformers, Streamlit, Google Gemini API, Aiven MySQL 등 외부 모델·라이브러리·서비스는 각 프로젝트 또는 서비스의 라이선스와 이용약관을 따릅니다. API 키, DB 비밀번호, 배포용 모델 zip 파일 등 민감 정보와 대용량 산출물은 공개 저장소에 포함하지 않습니다.
