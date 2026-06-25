@@ -1,6 +1,6 @@
 # 학교 민원 AI 정제 및 자동 분류 플랫폼
 
-#### Team 숙크크(SCC) | 숙명여자대학교 AI공학과 | Open Source Programming 2026-1
+#### Team 숙크크(SCC) | 숙명여자대학교 인공지능공학부 | Open Source Programming 2026-1
 
 AI 기반 학부모 민원 관리 플랫폼 | Open-Source Project 2026
 
