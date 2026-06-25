@@ -26,6 +26,14 @@ streamlit run app.py
 
 ---
 
+## Live Demo
+
+- Service URL: [학교민원 분류 AI](https://scc-osp2026-rxkfedeswl75xfzqjsg8x2.streamlit.app/)
+
+> Streamlit Cloud 무료 배포 환경 특성상 최초 접속 시 앱 로딩에 시간이 걸릴 수 있습니다.
+
+---
+
 ## 프로젝트 개요
 
 **SCC**는 학부모 민원을 디지털로 접수하고, 팀이 직접 Fine-Tuning한 KoBERT 모델로 민원 카테고리와 처리 긴급도를 자동 판단하는 Streamlit 기반 웹 플랫폼입니다.
